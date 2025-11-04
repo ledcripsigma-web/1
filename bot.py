@@ -1,12 +1,11 @@
 import logging
 import random
 from datetime import datetime
+import pytz
 from telegram import (
     Update, 
     InlineKeyboardButton, 
-    InlineKeyboardMarkup,
-    ReplyKeyboardMarkup,
-    KeyboardButton
+    InlineKeyboardMarkup
 )
 from telegram.ext import (
     Application, 
@@ -22,11 +21,13 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+logger = logging.getLogger(__name__)
 
-# Временное хранилище данных (в реальном проекте используйте БД)
+# Временное хранилище данных
 users_data = {}
 game_requests = {}
 active_games = {}
+pending_games = {}
 
 # Эмодзи для оформления
 EMOJI = {
@@ -62,7 +63,7 @@ EMOJI = {
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    username = update.effective_user.username
+    username = update.effective_user.username or "Игрок"
     
     # Инициализация данных пользователя
     if user_id not in users_data:
@@ -98,11 +99,59 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 {EMOJI['trophy']} _Испытай удачу и стань чемпионом!_ {EMOJI['trophy']}
     """
     
-    await update.message.reply_text(
-        welcome_text,
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
+    if update.message:
+        await update.message.reply_text(
+            welcome_text,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    else:
+        await update.callback_query.edit_message_text(
+            welcome_text,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+
+# Команда /stop для отмены игры
+async def stop_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # Ищем активную ожидающую игру
+    game_found = False
+    for game_id, game_data in pending_games.items():
+        if game_data['player1'] == user_id or game_data['player2'] == user_id:
+            # Возвращаем Stars если игра на Stars
+            if game_data['game_mode'] == 'stars':
+                bet_amount = game_data['bet_amount']
+                users_data[user_id]['balance'] += bet_amount
+                
+                # Уведомляем второго игрока
+                opponent_id = game_data['player2'] if game_data['player1'] == user_id else game_data['player1']
+                try:
+                    await context.bot.send_message(
+                        opponent_id,
+                        f"❌ Игра отменена противником. Ваши {bet_amount} Stars возвращены на баланс."
+                    )
+                except:
+                    pass
+                
+                text = f"""
+❌ *Игра отменена*
+
+{EMOJI['money']} Ваши {bet_amount} Stars возвращены на баланс
+{EMOJI['star']} Текущий баланс: {users_data[user_id]['balance']} Stars
+                """
+            else:
+                text = "❌ Обычная игра отменена"
+            
+            del pending_games[game_id]
+            game_found = True
+            break
+    
+    if not game_found:
+        text = "❌ У вас нет активных ожидающих игр"
+    
+    await update.message.reply_text(text, parse_mode='Markdown')
 
 # Обработчик кнопок
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -137,20 +186,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("gift_"):
         gift_type = data.split("_")[1]
         await process_gift_selection(query, user_id, gift_type)
-    elif data.startswith("accept_"):
-        await accept_game(query, context)
-    elif data.startswith("decline_"):
-        await decline_game(query)
     elif data == "back_menu":
         await start_from_callback(query, context)
     elif data.startswith("pay_"):
         amount = int(data.split("_")[1])
         await process_payment(query, user_id, amount)
+    elif data.startswith("accept_"):
+        await accept_game(query, context)
+    elif data.startswith("decline_"):
+        await decline_game(query)
+    elif data.startswith("pay_bet_"):
+        await process_bet_payment(query, context)
 
 # Запуск из callback
 async def start_from_callback(query, context):
     user_id = query.from_user.id
-    username = query.from_user.username
+    username = query.from_user.username or "Игрок"
     
     if user_id not in users_data:
         users_data[user_id] = {
@@ -290,7 +341,6 @@ async def show_stars_games(query, user_id):
 # Запрос противника
 async def request_opponent(query, context, game_type, game_mode):
     user_id = query.from_user.id
-    username = query.from_user.username
     
     context.user_data['waiting_for_opponent'] = True
     context.user_data['game_type'] = game_type
@@ -333,11 +383,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         game_type = context.user_data.get('game_type')
         game_mode = context.user_data.get('game_mode')
         
-        # Создаем запрос на игру
+        # Для игры на Stars запрашиваем ставку
+        if game_mode == 'stars':
+            context.user_data['opponent_username'] = opponent_username
+            context.user_data['waiting_for_bet'] = True
+            context.user_data['waiting_for_opponent'] = False
+            
+            user_balance = users_data.get(user_id, {}).get('balance', 0)
+            
+            await update.message.reply_text(
+                f"💰 *Введите ставку в Stars:*\n"
+                f"Ваш баланс: {user_balance} Stars\n"
+                f"Максимальная ставка: {user_balance} Stars",
+                parse_mode='Markdown'
+            )
+            return
+        
+        # Для обычной игры создаем запрос
         request_id = f"{user_id}_{datetime.now().timestamp()}"
         game_requests[request_id] = {
             "from_user": user_id,
-            "from_username": update.effective_user.username,
+            "from_username": update.effective_user.username or "Игрок",
             "to_username": opponent_username,
             "game_type": game_type,
             "game_mode": game_mode,
@@ -346,15 +412,54 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         context.user_data.clear()
         
-        # Здесь должна быть логика отправки запроса другому пользователю
-        # В демо-версии просто покажем сообщение
         await update.message.reply_text(
-            f"✅ Запрос на игру отправлен пользователю {opponent_username}\n"
-            f"В реальном боте здесь будет отправляться уведомление другому пользователю"
+            f"✅ Запрос на игру отправлен пользователю {opponent_username}"
         )
         
-        # Показываем меню обратно
         await start(update, context)
+    
+    elif context.user_data.get('waiting_for_bet'):
+        try:
+            bet_amount = int(update.message.text)
+            user_balance = users_data.get(user_id, {}).get('balance', 0)
+            
+            if bet_amount <= 0:
+                await update.message.reply_text("❌ Ставка должна быть положительной")
+                return
+            
+            if bet_amount > user_balance:
+                await update.message.reply_text(f"❌ Недостаточно Stars. Ваш баланс: {user_balance}")
+                return
+            
+            opponent_username = context.user_data['opponent_username']
+            game_type = context.user_data['game_type']
+            
+            # Создаем запрос на игру с ставкой
+            request_id = f"{user_id}_{datetime.now().timestamp()}"
+            game_requests[request_id] = {
+                "from_user": user_id,
+                "from_username": update.effective_user.username or "Игрок",
+                "to_username": opponent_username,
+                "game_type": game_type,
+                "game_mode": "stars",
+                "bet_amount": bet_amount,
+                "timestamp": datetime.now()
+            }
+            
+            # Резервируем Stars
+            users_data[user_id]['balance'] -= bet_amount
+            
+            context.user_data.clear()
+            
+            await update.message.reply_text(
+                f"✅ Запрос на игру отправлен пользователю {opponent_username}\n"
+                f"💰 Ставка: {bet_amount} Stars\n"
+                f"💎 Ваш баланс: {users_data[user_id]['balance']} Stars\n\n"
+                f"⚡ Ожидайте подтверждения от противника"
+            )
+            
+        except ValueError:
+            await update.message.reply_text("❌ Пожалуйста, введите корректную сумму ставки")
     
     elif context.user_data.get('waiting_deposit'):
         try:
@@ -363,7 +468,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ Сумма должна быть положительной")
                 return
             
-            # В реальном боте здесь была бы интеграция с платежной системой
             keyboard = [[InlineKeyboardButton("💳 Оплатить", callback_data=f"pay_{amount}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -378,6 +482,194 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         except ValueError:
             await update.message.reply_text("❌ Пожалуйста, введите корректную сумму")
+
+# Принять игру
+async def accept_game(query, context):
+    request_id = query.data.split("_")[1]
+    user_id = query.from_user.id
+    
+    if request_id not in game_requests:
+        await query.edit_message_text("❌ Запрос на игру устарел")
+        return
+    
+    game_request = game_requests[request_id]
+    
+    # Для игры на Stars проверяем баланс и создаем ожидающую игру
+    if game_request['game_mode'] == 'stars':
+        user_balance = users_data.get(user_id, {}).get('balance', 0)
+        bet_amount = game_request['bet_amount']
+        
+        if user_balance < bet_amount:
+            await query.edit_message_text(
+                f"❌ Недостаточно Stars для игры\n"
+                f"💰 Нужно: {bet_amount} Stars\n"
+                f"💎 Ваш баланс: {user_balance} Stars\n\n"
+                f"Пополните баланс чтобы принять игру"
+            )
+            return
+        
+        # Резервируем Stars у второго игрока
+        users_data[user_id]['balance'] -= bet_amount
+        
+        # Создаем ожидающую игру
+        game_id = f"game_{request_id}"
+        pending_games[game_id] = {
+            'player1': game_request['from_user'],
+            'player2': user_id,
+            'game_type': game_request['game_type'],
+            'game_mode': 'stars',
+            'bet_amount': bet_amount,
+            'player1_paid': True,
+            'player2_paid': False
+        }
+        
+        # Отправляем ссылку на оплату второму игроку
+        keyboard = [[InlineKeyboardButton("💳 Оплатить ставку", callback_data=f"pay_bet_{game_id}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            f"✅ Вы приняли игру!\n"
+            f"💰 Ставка: {bet_amount} Stars\n"
+            f"🎮 Игра: {game_request['game_type']}\n\n"
+            f"💳 *Для начала игры необходимо оплатить ставку*",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        
+        # Уведомляем первого игрока
+        try:
+            await context.bot.send_message(
+                game_request['from_user'],
+                f"✅ Противник принял вашу игру!\n"
+                f"💰 Ставка: {bet_amount} Stars\n"
+                f"⏳ Ожидайте оплаты ставки противником\n\n"
+                f"⚡ Используйте /stop для отмены игры"
+            )
+        except:
+            pass
+        
+    else:
+        # Для обычной игры сразу начинаем
+        await start_normal_game(query, context, game_request, user_id)
+    
+    del game_requests[request_id]
+
+# Отклонить игру
+async def decline_game(query, context):
+    request_id = query.data.split("_")[1]
+    
+    if request_id in game_requests:
+        game_request = game_requests[request_id]
+        
+        # Возвращаем Stars если игра на Stars
+        if game_request['game_mode'] == 'stars':
+            users_data[game_request['from_user']]['balance'] += game_request['bet_amount']
+            
+            # Уведомляем первого игрока
+            try:
+                await context.bot.send_message(
+                    game_request['from_user'],
+                    f"❌ Противник отклонил вашу игру\n"
+                    f"💰 {game_request['bet_amount']} Stars возвращены на ваш баланс"
+                )
+            except:
+                pass
+        
+        del game_requests[request_id]
+    
+    await query.edit_message_text("❌ Игра отклонена")
+
+# Оплата ставки для игры на Stars
+async def process_bet_payment(query, context):
+    game_id = query.data.split("_")[2]
+    user_id = query.from_user.id
+    
+    if game_id not in pending_games:
+        await query.edit_message_text("❌ Игра не найдена")
+        return
+    
+    game_data = pending_games[game_id]
+    
+    if user_id != game_data['player2']:
+        await query.edit_message_text("❌ Это не ваша игра")
+        return
+    
+    # Помечаем что второй игрок оплатил
+    game_data['player2_paid'] = True
+    
+    # Начинаем игру
+    await start_stars_game(query, context, game_data)
+    
+    del pending_games[game_id]
+
+# Запуск игры на Stars
+async def start_stars_game(query, context, game_data):
+    player1 = game_data['player1']
+    player2 = game_data['player2']
+    game_type = game_data['game_type']
+    bet_amount = game_data['bet_amount']
+    
+    # Игровая логика
+    if game_type == "dice":
+        # Бросок кубиков
+        roll1 = random.randint(1, 6)
+        roll2 = random.randint(1, 6)
+        
+        # Определяем победителя
+        if roll1 > roll2:
+            winner_id = player1
+            loser_id = player2
+            winner_roll = roll1
+            loser_roll = roll2
+        elif roll2 > roll1:
+            winner_id = player2
+            loser_id = player1
+            winner_roll = roll2
+            loser_roll = roll1
+        else:
+            # Ничья - случайный победитель 50/50
+            if random.choice([True, False]):
+                winner_id = player1
+                loser_id = player2
+                winner_roll = roll1
+                loser_roll = roll2
+            else:
+                winner_id = player2
+                loser_id = player1
+                winner_roll = roll2
+                loser_roll = roll1
+        
+        # Начисляем выигрыш
+        total_prize = bet_amount * 2
+        users_data[winner_id]['balance'] += total_prize
+        users_data[winner_id]['wins'] += 1
+        users_data[winner_id]['stars_won'] += bet_amount
+        users_data[winner_id]['games_played'] += 1
+        users_data[loser_id]['games_played'] += 1
+        
+        # Отправляем результаты
+        result_text = f"""
+🎲 *Поединок начался!* 🎲
+
+🎯 Игроки бросили кубики:
+
+{EMOJI['dice']} {users_data[player1]['username']}: {roll1}
+{EMOJI['dice']} {users_data[player2]['username']}: {roll2}
+
+🏆 *Победитель: {users_data[winner_id]['username']}*
+
+{winner_roll}️⃣ Победа: @{users_data[winner_id]['username']} - Выиграл {bet_amount} Stars⭐
+{loser_roll}️⃣ Поражение: @{users_data[loser_id]['username']}
+
+💰 Общий выигрыш: {total_prize} Stars
+        """
+        
+    # Отправляем результаты обоим игрокам
+    try:
+        await context.bot.send_message(player1, result_text, parse_mode='Markdown')
+        await context.bot.send_message(player2, result_text, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Ошибка отправки результатов: {e}")
 
 # Показать статистику
 async def show_stats(query, user_id):
@@ -424,7 +716,8 @@ async def show_deposit(query, user_id):
     await query.edit_message_text(text, parse_mode='Markdown')
     
     # Устанавливаем флаг ожидания суммы пополнения
-    context = query._bot_data['application']
+    if 'user_data' not in context:
+        context.user_data = {}
     context.user_data[user_id] = {'waiting_deposit': True}
 
 # Обработка платежа
@@ -582,15 +875,8 @@ async def process_gift_selection(query, user_id, gift_type):
         
         await query.edit_message_text(success_text, reply_markup=reply_markup, parse_mode='Markdown')
         
-        # Отправляем сам подарок (стикер или изображение)
-        gift_stickers = {
-            "teddy": "🧸", "heart": "💝",
-            "box": "🎁", "rose": "🌹", 
-            "cake": "🎂", "flowers": "💐", "rocket": "🚀",
-            "ring": "💍", "diamond": "💎", "trophy": "🏆"
-        }
-        
-        gift_emoji = gift_stickers.get(gift_type, "🎁")
+        # Отправляем сам подарок
+        gift_emoji = gift_names[gift_type].split()[-1]  # Берем эмодзи из названия
         
         # Отправляем сообщение с подарком
         gift_message = f"""
@@ -622,25 +908,22 @@ async def process_gift_selection(query, user_id, gift_type):
         
         await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
-# Принять игру
-async def accept_game(query, context):
-    await query.edit_message_text("✅ Игра принята! Начинаем...")
-
-# Отклонить игру  
-async def decline_game(query):
-    await query.edit_message_text("❌ Игра отклонена")
-
 # Главная функция
 def main():
-    # Замените '7611839139:AAEtf4j8itdKLjfo9YGRLhIOqPorpqtg2LY' на токен вашего бота
-    application = Application.builder().token("YOUR_BOT_TOKEN").build()
+    # Ваш токен бота
+    TOKEN = "7611839139:AAEtf4j8itdKLjfo9YGRLhIOqPorpqtg2LY"
+    
+    # Создаем Application
+    application = Application.builder().token(TOKEN).build()
     
     # Обработчики команд
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("stop", stop_game))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     # Запуск бота
+    print("Бот запущен...")
     application.run_polling()
 
 if __name__ == '__main__':
