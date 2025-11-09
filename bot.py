@@ -10,6 +10,7 @@ from flask import Flask, request
 import sqlite3
 from datetime import datetime
 import base64
+import zipfile
 
 # Конфигурация
 API_KEY = "AIzaSyARZYE8kSTBVlGF_A1jxFdEQdVi5-9MN38"
@@ -160,6 +161,8 @@ def get_stats():
     plugins_generated = cursor.fetchone()[0]
     cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "code_modified"')
     codes_modified = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "project_generated"')
+    projects_generated = cursor.fetchone()[0]
     cursor.execute('SELECT SUM(requests_balance) FROM users')
     total_requests = cursor.fetchone()[0] or 0
     conn.close()
@@ -168,6 +171,7 @@ def get_stats():
         'codes_generated': codes_generated,
         'plugins_generated': plugins_generated,
         'codes_modified': codes_modified,
+        'projects_generated': projects_generated,
         'total_requests': total_requests
     }
 
@@ -183,7 +187,7 @@ class GeminiChat:
         self.url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={API_KEY}"
         self.headers = {'Content-Type': 'application/json'}
     
-    def process_in_parts(self, message, is_plugin=False, image_data=None):
+    def process_in_parts(self, message, is_plugin=False, image_data=None, is_project=False):
         parts = split_long_prompt(message)
         
         full_response = ""
@@ -191,6 +195,8 @@ class GeminiChat:
             try:
                 if is_plugin:
                     response = self.send_message(part, is_code_request=False, is_plugin_request=True, image_data=image_data)
+                elif is_project:
+                    response = self.send_message(part, is_code_request=False, is_project_request=True, image_data=image_data)
                 else:
                     response = self.send_message(part, is_code_request=True, image_data=image_data)
                 
@@ -204,9 +210,9 @@ class GeminiChat:
         
         return full_response
     
-    def send_message(self, message, is_code_request=True, is_plugin_request=False, image_data=None):
+    def send_message(self, message, is_code_request=True, is_plugin_request=False, is_project_request=False, image_data=None):
         if len(message.split()) > 20 and not image_data:
-            return self.process_in_parts(message, is_plugin_request, image_data)
+            return self.process_in_parts(message, is_plugin_request, image_data, is_project_request)
         
         if is_plugin_request:
             prompt = f"""
@@ -234,6 +240,37 @@ class GeminiChat:
 
             Создай полноценный рабочий плагин с комментариями.
             """
+        elif is_project_request:
+            prompt = f"""
+            Создай полноценный Python проект для: {message}
+            
+            Требования:
+            1. Создай несколько файлов с понятной структурой проекта
+            2. Включи основной файл (main.py, app.py или аналогичный)
+            3. Добавь README.md с инструкцией по установке и запуску
+            4. Добавь requirements.txt если нужны внешние зависимости
+            5. Создай логичную структуру папок если нужно
+            6. Каждый файл должен быть полностью рабочим и содержать комментарии
+            
+            Формат ответа - каждый файл должен быть в отдельном блоке с указанием имени файла:
+            
+            ФАЙЛ: main.py
+            ```python
+            # код main.py
+            ```
+            
+            ФАЙЛ: config.py
+            ```python
+            # код config.py
+            ```
+            
+            ФАЙЛ: README.md
+            ```markdown
+            # описание проекта
+            ```
+            
+            И так для всех файлов проекта.
+            """
         elif is_code_request:
             prompt = f"Создай Python код для: {message}. Добавь комментарии и описание."
         else:
@@ -251,7 +288,7 @@ class GeminiChat:
             })
         
         try:
-            response = requests.post(self.url, headers=self.headers, json=contents, timeout=60)
+            response = requests.post(self.url, headers=self.headers, json=contents, timeout=120)
             
             if response.status_code == 200:
                 result = response.json()
@@ -291,11 +328,73 @@ def parse_code_response(response):
     except Exception as e:
         return "Ошибка при разборе ответа", response
 
+def parse_project_response(response):
+    """Парсинг ответа с несколькими файлами проекта"""
+    files = {}
+    current_file = None
+    current_content = []
+    
+    lines = response.split('\n')
+    for line in lines:
+        if line.startswith('ФАЙЛ:') or line.startswith('FILE:'):
+            # Сохраняем предыдущий файл если есть
+            if current_file and current_content:
+                files[current_file] = '\n'.join(current_content).strip()
+            
+            # Начинаем новый файл
+            current_file = line.split(':', 1)[1].strip()
+            current_content = []
+        elif line.startswith('```'):
+            continue  # Пропускаем разделители кода
+        elif current_file is not None:
+            current_content.append(line)
+    
+    # Добавляем последний файл
+    if current_file and current_content:
+        files[current_file] = '\n'.join(current_content).strip()
+    
+    # Если не нашли структуру с ФАЙЛ:, пробуем найти блоки кода
+    if not files:
+        parts = response.split('```')
+        for i in range(0, len(parts)-1, 2):
+            if i+1 < len(parts):
+                code_block = parts[i+1].strip()
+                # Пытаемся определить имя файла из предыдущего текста
+                prev_text = parts[i].strip()
+                filename = "file_{}.py".format(i//2 + 1)
+                if 'main' in prev_text.lower():
+                    filename = "main.py"
+                elif 'readme' in prev_text.lower():
+                    filename = "README.md"
+                elif 'requirement' in prev_text.lower():
+                    filename = "requirements.txt"
+                elif 'config' in prev_text.lower():
+                    filename = "config.py"
+                files[filename] = code_block
+    
+    return files
+
+def create_zip_from_files(files):
+    """Создает ZIP архив из словаря файлов"""
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for filename, content in files.items():
+            zip_file.writestr(filename, content)
+    zip_buffer.seek(0)
+    return zip_buffer
+
 def process_image_message(message):
     """Обработка сообщения с изображением и текстом"""
-    caption = message.caption if message.caption else ""
-    image_file = None
+    if message.text:
+        return message.text, None
     
+    caption = message.caption if message.caption else ""
+    
+    # Если это просто текстовое сообщение
+    if not (message.photo or (message.document and message.document.mime_type.startswith('image/'))):
+        return "", None
+    
+    image_file = None
     if message.photo:
         # Берем самое большое фото
         file_id = message.photo[-1].file_id
@@ -355,23 +454,21 @@ def show_main_menu(message):
     user_id = message.from_user.id
     balance = get_user_balance(user_id)
     markup = types.InlineKeyboardMarkup(row_width=1)
-    btn1 = types.InlineKeyboardButton('🧑‍💻 Написать код', callback_data='write_code')
-    btn2 = types.InlineKeyboardButton('🔌 Написать плагин', callback_data='write_plugin')
-    btn3 = types.InlineKeyboardButton('⚡ Изменить готовый', callback_data='modify_code')
-    btn4 = types.InlineKeyboardButton('📊 Статистика', callback_data='stats')
-    btn5 = types.InlineKeyboardButton('💎 Подписка', callback_data='subscription')
-    btn6 = types.InlineKeyboardButton('👨‍💻 Автор бота', callback_data='author')
+    btn1 = types.InlineKeyboardButton('💻 Написать код', callback_data='write_code')
+    btn2 = types.InlineKeyboardButton('🚀 Собрать проект', callback_data='write_project')
+    btn3 = types.InlineKeyboardButton('🔌 Написать плагин', callback_data='write_plugin')
+    btn4 = types.InlineKeyboardButton('⚡ Изменить готовый', callback_data='modify_code')
+    btn5 = types.InlineKeyboardButton('📊 Статистика', callback_data='stats')
+    btn6 = types.InlineKeyboardButton('💎 Подписка', callback_data='subscription')
+    btn7 = types.InlineKeyboardButton('👤 Автор бота', callback_data='author')
     if message.from_user.id == ADMIN_ID:
-        btn7 = types.InlineKeyboardButton('👑 Админ панель', callback_data='admin_panel')
-        markup.add(btn1, btn2, btn3, btn4, btn5, btn6, btn7)
+        btn8 = types.InlineKeyboardButton('👑 Админ панель', callback_data='admin_panel')
+        markup.add(btn1, btn2, btn3, btn4, btn5, btn6, btn7, btn8)
     else:
-        markup.add(btn1, btn2, btn3, btn4, btn5, btn6)
+        markup.add(btn1, btn2, btn3, btn4, btn5, btn6, btn7)
     welcome_text = f"""🤖 Привет, я GeniAi!
-Ваш помощник для создания Python кодов
 
-💼 Баланс: {balance} запросов
-📝 Можно описывать запросы подробно
-🖼️ Можно отправлять скриншоты с описанием
+💰 Баланс: {balance} запросов
 
 Выберите действие:"""
     bot.send_message(message.chat.id, welcome_text, reply_markup=markup)
@@ -382,7 +479,7 @@ def show_subscription_info(message):
     balance = get_user_balance(user_id)
     text = f"""💎 Информация о подписке
 
-💼 У вас {balance} запросов
+💰 У вас {balance} запросов
 
 🛒 Купить запросы: @xostcodingkrytoy
 
@@ -406,6 +503,7 @@ def show_admin_panel(message):
 📊 Статистика:
 👥 Пользователей: {stats['total_users']}
 💻 Кодов создано: {stats['codes_generated']}
+🚀 Проектов создано: {stats['projects_generated']}
 🔌 Плагинов создано: {stats['plugins_generated']}
 ⚡ Кодов изменено: {stats['codes_modified']}
 📈 Всего запросов: {stats['total_requests']}
@@ -427,7 +525,7 @@ def handle_request_command(message):
         try:
             user_message = f"""🎉 Спасибо за покупку!
 📦 Вам выдано {amount} запросов
-💼 Текущий баланс: {new_balance} запросов"""
+💰 Текущий баланс: {new_balance} запросов"""
             bot.send_message(user_id, user_message)
         except: pass
         bot.send_message(message.chat.id, f"✅ Пользователю {user_id} выдано {amount} запросов. Новый баланс: {new_balance}")
@@ -450,7 +548,7 @@ def handle_users_command(message):
     for user in users:
         user_id, username, first_name, balance = user
         user_info = f"@{username}" if username else first_name
-        text += f"🆔 {user_id} | 👤 {user_info} | 💼 {balance}\n"
+        text += f"🆔 {user_id} | 👤 {user_info} | 💰 {balance}\n"
     bot.send_message(message.chat.id, text)
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -471,15 +569,23 @@ def handle_callback(call):
                 bot.answer_callback_query(call.id, "❌ У вас закончились запросы!")
                 show_subscription_info(call.message)
             else:
-                msg = bot.send_message(chat_id, "🧑‍💻 Опишите какой код нужен (можно отправить скриншот с подписью):\n\n💡 Пример: 'калькулятор на Python с GUI'")
+                msg = bot.send_message(chat_id, "💻 Опишите какой код нужен:")
                 user_states[chat_id] = 'waiting_code_request'
+        elif call.data == 'write_project':
+            balance = get_user_balance(user_id)
+            if balance <= 0:
+                bot.answer_callback_query(call.id, "❌ У вас закончились запросы!")
+                show_subscription_info(call.message)
+            else:
+                msg = bot.send_message(chat_id, "🚀 Опишите какой проект нужен:")
+                user_states[chat_id] = 'waiting_project_request'
         elif call.data == 'write_plugin':
             balance = get_user_balance(user_id)
             if balance <= 0:
                 bot.answer_callback_query(call.id, "❌ У вас закончились запросы!")
                 show_subscription_info(call.message)
             else:
-                msg = bot.send_message(chat_id, "🔌 Опишите какой плагин нужен (можно отправить скриншот с подписью):\n\n💡 Пример: 'плагин для смены аватарки в Telegram'")
+                msg = bot.send_message(chat_id, "🔌 Опишите какой плагин нужен:")
                 user_states[chat_id] = 'waiting_plugin_request'
         elif call.data == 'modify_code':
             balance = get_user_balance(user_id)
@@ -487,7 +593,7 @@ def handle_callback(call):
                 bot.answer_callback_query(call.id, "❌ У вас закончились запросы!")
                 show_subscription_info(call.message)
             else:
-                msg = bot.send_message(chat_id, "⚡ Отправьте .py файл для изменения (можно с описанием изменений в подписи)\n\n💡 Можно описывать изменения подробно")
+                msg = bot.send_message(chat_id, "⚡ Отправьте .py файл для изменения:")
                 user_states[chat_id] = 'waiting_code_file'
         elif call.data == 'stats':
             stats = get_stats()
@@ -496,14 +602,15 @@ def handle_callback(call):
 
 👥 Всего пользователей: {stats['total_users']}
 💻 Создано кодов: {stats['codes_generated']}
+🚀 Создано проектов: {stats['projects_generated']}
 🔌 Создано плагинов: {stats['plugins_generated']}
 ⚡ Изменено кодов: {stats['codes_modified']}
-💼 Ваш баланс: {user_balance} запросов"""
+💰 Ваш баланс: {user_balance} запросов"""
             bot.send_message(chat_id, stats_text)
         elif call.data == 'subscription':
             show_subscription_info(call.message)
         elif call.data == 'author':
-            bot.send_message(chat_id, "👨‍💻 Автор бота: @xostcodingkrytoy")
+            bot.send_message(chat_id, "👤 Автор бота: @xostcodingkrytoy")
         elif call.data == 'admin_panel':
             if user_id == ADMIN_ID:
                 show_admin_panel(call.message)
@@ -524,6 +631,8 @@ def handle_code_requests(message):
     
     if state == 'waiting_code_request':
         process_code_request_with_image(message)
+    elif state == 'waiting_project_request':
+        process_project_request_with_image(message)
     elif state == 'waiting_plugin_request':
         process_plugin_request_with_image(message)
     elif state == 'waiting_modification_request':
@@ -546,7 +655,8 @@ def process_code_request_with_image(message):
     # Получаем текст и изображение
     user_request, image_data = process_image_message(message)
     
-    if not user_request:
+    # Проверяем есть ли текст
+    if not user_request or user_request.strip() == "":
         bot.send_message(chat_id, "❌ Пожалуйста, добавьте описание к запросу")
         return
         
@@ -568,12 +678,71 @@ def process_code_request_with_image(message):
             file_buffer.name = "generated_code.py"
             bot.delete_message(chat_id, processing_msg.message_id)
             bot.send_document(chat_id, file_buffer, 
-                             caption=f"✅ Готовый код\n\n📝 Описание:\n{description}\n\n💼 Осталось запросов: {new_balance}")
+                             caption=f"✅ Готовый код\n\n📝 Описание:\n{description}\n\n💰 Осталось запросов: {new_balance}")
             user_states[chat_id] = 'main_menu'
             add_stat(user_id, "code_generated")
     except Exception as e:
         bot.delete_message(chat_id, processing_msg.message_id)
-        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь уменьшить промт, либо попробовать заново")
+        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь позже")
+        add_requests(user_id, 1, "Возврат при ошибке")
+
+def process_project_request_with_image(message):
+    if not check_subscription(message.from_user.id):
+        show_subscription_request(message)
+        return
+        
+    user_id = message.from_user.id
+    success, new_balance = use_request(user_id)
+    if not success:
+        bot.send_message(message.chat.id, "❌ У вас закончились запросы! Нажмите на подписку чтобы купить новые")
+        show_subscription_info(message)
+        return
+        
+    chat_id = message.chat.id
+    
+    # Получаем текст и изображение
+    user_request, image_data = process_image_message(message)
+    
+    # Проверяем есть ли текст
+    if not user_request or user_request.strip() == "":
+        bot.send_message(chat_id, "❌ Пожалуйста, добавьте описание проекта")
+        return
+        
+    if user_request.startswith('/'):
+        show_main_menu(message)
+        return
+        
+    processing_msg = bot.send_message(chat_id, "🚀 Собираю проект...")
+    try:
+        gemini = GeminiChat()
+        response = gemini.send_message(user_request, is_project_request=True, image_data=image_data)
+        if response.startswith('❌'):
+            bot.delete_message(chat_id, processing_msg.message_id)
+            bot.send_message(chat_id, response)
+            add_requests(user_id, 1, "Возврат при ошибке")
+        else:
+            files = parse_project_response(response)
+            if not files:
+                bot.delete_message(chat_id, processing_msg.message_id)
+                bot.send_message(chat_id, "❌ Не удалось распознать структуру проекта. Попробуйте еще раз.")
+                add_requests(user_id, 1, "Возврат при ошибке")
+                return
+            
+            # Создаем ZIP архив
+            zip_buffer = create_zip_from_files(files)
+            zip_buffer.name = "project.zip"
+            
+            # Создаем описание файлов
+            file_list = "\n".join([f"📄 {filename}" for filename in files.keys()])
+            
+            bot.delete_message(chat_id, processing_msg.message_id)
+            bot.send_document(chat_id, zip_buffer,
+                             caption=f"🚀 Готовый проект!\n\n📁 Файлы в проекте:\n{file_list}\n\n💰 Осталось запросов: {new_balance}")
+            user_states[chat_id] = 'main_menu'
+            add_stat(user_id, "project_generated")
+    except Exception as e:
+        bot.delete_message(chat_id, processing_msg.message_id)
+        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь позже")
         add_requests(user_id, 1, "Возврат при ошибке")
 
 def process_plugin_request_with_image(message):
@@ -593,7 +762,8 @@ def process_plugin_request_with_image(message):
     # Получаем текст и изображение
     user_request, image_data = process_image_message(message)
     
-    if not user_request:
+    # Проверяем есть ли текст
+    if not user_request or user_request.strip() == "":
         bot.send_message(chat_id, "❌ Пожалуйста, добавьте описание к запросу")
         return
         
@@ -615,12 +785,12 @@ def process_plugin_request_with_image(message):
             file_buffer.name = "generated_plugin.plugin"
             bot.delete_message(chat_id, processing_msg.message_id)
             bot.send_document(chat_id, file_buffer, 
-                             caption=f"✅ Готовый плагин\n\n📝 Описание:\n{description}\n\n💼 Осталось запросов: {new_balance}")
+                             caption=f"✅ Готовый плагин\n\n📝 Описание:\n{description}\n\n💰 Осталось запросов: {new_balance}")
             user_states[chat_id] = 'main_menu'
             add_stat(user_id, "plugin_generated")
     except Exception as e:
         bot.delete_message(chat_id, processing_msg.message_id)
-        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь уменьшить промт, либо попробовать заново")
+        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь позже")
         add_requests(user_id, 1, "Возврат при ошибке")
 
 @bot.message_handler(content_types=['document'])
@@ -641,7 +811,7 @@ def handle_document(message):
                 if message.caption:
                     process_modification_request_with_image(message)
                 else:
-                    msg = bot.send_message(chat_id, "⚡ Что изменить в коде? (можно отправить скриншот с подписью):\n\n💡 Пример: 'добавь обработку ошибок и логирование'")
+                    msg = bot.send_message(chat_id, "⚡ Что изменить в коде?")
             except Exception as e:
                 bot.send_message(chat_id, f"❌ Ошибка при чтении файла: {str(e)}")
         else:
@@ -666,7 +836,8 @@ def process_modification_request_with_image(message):
     # Получаем текст и изображение
     modification_request, image_data = process_image_message(message)
     
-    if not modification_request:
+    # Проверяем есть ли текст
+    if not modification_request or modification_request.strip() == "":
         bot.send_message(chat_id, "❌ Пожалуйста, добавьте описание изменений")
         return
         
@@ -691,12 +862,12 @@ def process_modification_request_with_image(message):
             file_buffer.name = "modified_code.py"
             bot.delete_message(chat_id, processing_msg.message_id)
             bot.send_document(chat_id, file_buffer,
-                             caption=f"✅ Измененный код\n\n📝 Что сделано:\n{description}\n\n💼 Осталось запросов: {new_balance}")
+                             caption=f"✅ Измененный код\n\n📝 Что сделано:\n{description}\n\n💰 Осталось запросов: {new_balance}")
             user_states[chat_id] = 'main_menu'
             add_stat(user_id, "code_modified")
     except Exception as e:
         bot.delete_message(chat_id, processing_msg.message_id)
-        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь уменьшить промт, либо попробовать заново")
+        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь позже")
         add_requests(user_id, 1, "Возврат при ошибке")
 
 @bot.message_handler(func=lambda message: True)
@@ -705,7 +876,7 @@ def handle_other_messages(message):
         show_subscription_request(message)
         return
     chat_id = message.chat.id
-    if user_states.get(chat_id) not in ['waiting_code_request', 'waiting_plugin_request', 'waiting_code_file', 'waiting_modification_request']:
+    if user_states.get(chat_id) not in ['waiting_code_request', 'waiting_project_request', 'waiting_plugin_request', 'waiting_code_file', 'waiting_modification_request']:
         show_main_menu(message)
 
 def start_keep_alive():
