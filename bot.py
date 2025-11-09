@@ -1,926 +1,728 @@
-import logging
-import random
+import requests
+import json
+import telebot
+from telebot import types
+import io
+import os
+import threading
+import time
+from flask import Flask, request
+import sqlite3
 from datetime import datetime
-from telegram import (
-    Update, 
-    InlineKeyboardButton, 
-    InlineKeyboardMarkup
-)
-from telegram.ext import (
-    Application, 
-    CommandHandler, 
-    CallbackQueryHandler, 
-    MessageHandler, 
-    filters,
-    ContextTypes
-)
+import base64
 
-# Настройка логирования
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+# Конфигурация
+API_KEY = "AIzaSyARZYE8kSTBVlGF_A1jxFdEQdVi5-9MN38"
+SELECTED_MODEL = "gemini-2.5-flash"
+CHANNEL_USERNAME = "@GeniAi"
+ADMIN_ID = 2202291197
+BOT_TOKEN = "2201851225:AAEruvQjAyxiYIcsVCwa-JoIcWaXMx4kqE8/test"
 
-# Временное хранилище данных
-users_data = {}
-game_requests = {}
-active_games = {}
-pending_games = {}
+bot = telebot.TeleBot(BOT_TOKEN)
+app = Flask(__name__)
 
-# Эмодзи для оформления
-EMOJI = {
-    "dice": "🎲",
-    "star": "⭐",
-    "money": "💰",
-    "gift": "🎁",
-    "stats": "📊",
-    "support": "🆘",
-    "add": "➕",
-    "withdraw": "💸",
-    "win": "🏆",
-    "lose": "❌",
-    "accept": "✅",
-    "decline": "❌",
-    "fire": "🔥",
-    "trophy": "🏆",
-    "diamond": "💎",
-    "ring": "💍",
-    "cake": "🎂",
-    "rocket": "🚀",
-    "flower": "💐",
-    "rose": "🌹",
-    "teddy": "🧸",
-    "heart": "💝",
-    "slot": "🎰",
-    "dart": "🎯",
-    "football": "⚽",
-    "basketball": "🏀",
-    "bowling": "🎳"
-}
-
-# Команда /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    username = update.effective_user.username or "Игрок"
-    
-    # Инициализация данных пользователя
-    if user_id not in users_data:
-        users_data[user_id] = {
-            "balance": 0,
-            "wins": 0,
-            "games_played": 0,
-            "stars_won": 0,
-            "username": username
-        }
-    
-    # Создаем клавиатуру меню
-    keyboard = [
-        [InlineKeyboardButton(f"Играть{EMOJI['dice']}", callback_data="play")],
-        [
-            InlineKeyboardButton(f"Статистика{EMOJI['stats']}", callback_data="stats"),
-            InlineKeyboardButton(f"Пополнить{EMOJI['add']}", callback_data="deposit")
-        ],
-        [
-            InlineKeyboardButton(f"Вывод{EMOJI['withdraw']}", callback_data="withdraw"),
-            InlineKeyboardButton(f"Поддержка{EMOJI['support']}", callback_data="support")
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    welcome_text = f"""
-{EMOJI['fire']} *Привет, добро пожаловать в RuletsGame!* {EMOJI['fire']}
-
-🎮 *Это телеграм игра, где можно:*
-• Весело провести время с друзьями {EMOJI['dice']}
-• Играть на реальные Stars {EMOJI['star']}
-
-{EMOJI['trophy']} _Испытай удачу и стань чемпионом!_ {EMOJI['trophy']}
-    """
-    
-    if update.message:
-        await update.message.reply_text(
-            welcome_text,
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
+# Инициализация базы данных
+def init_db():
+    conn = sqlite3.connect('bot_stats.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            last_name TEXT,
+            subscribed INTEGER DEFAULT 0,
+            requests_balance INTEGER DEFAULT 5,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-    else:
-        await update.callback_query.edit_message_text(
-            welcome_text,
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS stats (
+            user_id INTEGER,
+            action_type TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
-
-# Команда /stop для отмены игры
-async def stop_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    # Ищем активную ожидающую игру
-    game_found = False
-    for game_id, game_data in pending_games.items():
-        if game_data['player1'] == user_id or game_data['player2'] == user_id:
-            # Возвращаем Stars если игра на Stars
-            if game_data['game_mode'] == 'stars':
-                bet_amount = game_data['bet_amount']
-                users_data[user_id]['balance'] += bet_amount
-                
-                # Уведомляем второго игрока
-                opponent_id = game_data['player2'] if game_data['player1'] == user_id else game_data['player1']
-                try:
-                    await context.bot.send_message(
-                        opponent_id,
-                        f"❌ Игра отменена противником. Ваши {bet_amount} Stars возвращены на баланс."
-                    )
-                except:
-                    pass
-                
-                text = f"""
-❌ *Игра отменена*
-
-{EMOJI['money']} Ваши {bet_amount} Stars возвращены на баланс
-{EMOJI['star']} Текущий баланс: {users_data[user_id]['balance']} Stars
-                """
-            else:
-                text = "❌ Обычная игра отменена"
-            
-            del pending_games[game_id]
-            game_found = True
-            break
-    
-    if not game_found:
-        text = "❌ У вас нет активных ожидающих игр"
-    
-    await update.message.reply_text(text, parse_mode='Markdown')
-
-# Обработчик кнопок
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-    
-    data = query.data
-    
-    if data == "play":
-        await show_game_modes(query)
-    elif data == "stats":
-        await show_stats(query, user_id)
-    elif data == "deposit":
-        await show_deposit(query, user_id)
-    elif data == "withdraw":
-        await show_withdraw(query, user_id)
-    elif data == "support":
-        await show_support(query)
-    elif data == "normal_game":
-        await show_normal_games(query)
-    elif data == "stars_game":
-        await show_stars_games(query, user_id)
-    elif data.startswith("game_"):
-        game_type = data.split("_")[1]
-        await request_opponent(query, context, game_type, "normal")
-    elif data.startswith("stars_game_"):
-        game_type = data.split("_")[2]
-        await request_opponent(query, context, game_type, "stars")
-    elif data == "select_gift":
-        await select_gift(query, user_id)
-    elif data.startswith("gift_"):
-        gift_type = data.split("_")[1]
-        await process_gift_selection(query, user_id, gift_type)
-    elif data == "back_menu":
-        await start_from_callback(query, context)
-    elif data.startswith("pay_"):
-        amount = int(data.split("_")[1])
-        await process_payment(query, user_id, amount)
-    elif data.startswith("accept_"):
-        await accept_game(query, context)
-    elif data.startswith("decline_"):
-        await decline_game(query)
-    elif data.startswith("pay_bet_"):
-        await process_bet_payment(query, context)
-
-# Запуск из callback
-async def start_from_callback(query, context):
-    user_id = query.from_user.id
-    username = query.from_user.username or "Игрок"
-    
-    if user_id not in users_data:
-        users_data[user_id] = {
-            "balance": 0,
-            "wins": 0,
-            "games_played": 0,
-            "stars_won": 0,
-            "username": username
-        }
-    
-    keyboard = [
-        [InlineKeyboardButton(f"Играть{EMOJI['dice']}", callback_data="play")],
-        [
-            InlineKeyboardButton(f"Статистика{EMOJI['stats']}", callback_data="stats"),
-            InlineKeyboardButton(f"Пополнить{EMOJI['add']}", callback_data="deposit")
-        ],
-        [
-            InlineKeyboardButton(f"Вывод{EMOJI['withdraw']}", callback_data="withdraw"),
-            InlineKeyboardButton(f"Поддержка{EMOJI['support']}", callback_data="support")
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    welcome_text = f"""
-{EMOJI['fire']} *Привет, добро пожаловать в RuletsGame!* {EMOJI['fire']}
-
-🎮 *Это телеграм игра, где можно:*
-• Весело провести время с друзьями {EMOJI['dice']}
-• Играть на реальные Stars {EMOJI['star']}
-
-{EMOJI['trophy']} _Испытай удачу и стань чемпионом!_ {EMOJI['trophy']}
-    """
-    
-    await query.edit_message_text(
-        welcome_text,
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
-
-# Показать режимы игры
-async def show_game_modes(query):
-    keyboard = [
-        [InlineKeyboardButton(f"Обычная игра{EMOJI['dice']}", callback_data="normal_game")],
-        [InlineKeyboardButton(f"Игра на Stars{EMOJI['star']}", callback_data="stars_game")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="back_menu")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    text = f"""
-🎮 *Выбери режим игры:*
-
-{EMOJI['dice']} *Обычная игра* - играй для развлечения
-{EMOJI['star']} *Игра на Stars* - играй на виртуальные звезды
-    """
-    
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# Показать обычные игры
-async def show_normal_games(query):
-    keyboard = [
-        [
-            InlineKeyboardButton(f"{EMOJI['slot']}", callback_data="game_slot"),
-            InlineKeyboardButton(f"{EMOJI['dice']}", callback_data="game_dice"),
-            InlineKeyboardButton(f"{EMOJI['dart']}", callback_data="game_dart")
-        ],
-        [
-            InlineKeyboardButton(f"{EMOJI['football']}", callback_data="game_football"),
-            InlineKeyboardButton(f"{EMOJI['basketball']}", callback_data="game_basketball"),
-            InlineKeyboardButton(f"{EMOJI['bowling']}", callback_data="game_bowling")
-        ],
-        [InlineKeyboardButton("◀️ Назад", callback_data="play")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    text = f"""
-🎲 *Выбери игру:*
-
-{EMOJI['slot']} Слоты
-{EMOJI['dice']} Кубики  
-{EMOJI['dart']} Дартс
-{EMOJI['football']} Футбол
-{EMOJI['basketball']} Баскетбол
-{EMOJI['bowling']} Боулинг
-    """
-    
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# Показать игры на Stars
-async def show_stars_games(query, user_id):
-    user_data = users_data.get(user_id, {})
-    balance = user_data.get("balance", 0)
-    
-    if balance <= 0:
-        keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="play")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        text = f"""
-{EMOJI['money']} *Недостаточно Stars!*
-
-Твой баланс: *{balance}* {EMOJI['star']}
-
-Пополни баланс чтобы играть на Stars!
-        """
-        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-        return
-    
-    keyboard = [
-        [
-            InlineKeyboardButton(f"{EMOJI['slot']}", callback_data="stars_game_slot"),
-            InlineKeyboardButton(f"{EMOJI['dice']}", callback_data="stars_game_dice"),
-            InlineKeyboardButton(f"{EMOJI['dart']}", callback_data="stars_game_dart")
-        ],
-        [
-            InlineKeyboardButton(f"{EMOJI['football']}", callback_data="stars_game_football"),
-            InlineKeyboardButton(f"{EMOJI['basketball']}", callback_data="stars_game_basketball"),
-            InlineKeyboardButton(f"{EMOJI['bowling']}", callback_data="stars_game_bowling")
-        ],
-        [InlineKeyboardButton("◀️ Назад", callback_data="play")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    text = f"""
-🎲 *Выбери игру на Stars:*
-
-Твой баланс: *{balance}* {EMOJI['star']}
-
-{EMOJI['slot']} Слоты
-{EMOJI['dice']} Кубики  
-{EMOJI['dart']} Дартс
-{EMOJI['football']} Футбол
-{EMOJI['basketball']} Баскетбол
-{EMOJI['bowling']} Боулинг
-    """
-    
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# Запрос противника
-async def request_opponent(query, context, game_type, game_mode):
-    user_id = query.from_user.id
-    
-    context.user_data['waiting_for_opponent'] = True
-    context.user_data['game_type'] = game_type
-    context.user_data['game_mode'] = game_mode
-    
-    game_names = {
-        "slot": f"Слоты {EMOJI['slot']}",
-        "dice": f"Кубики {EMOJI['dice']}",
-        "dart": f"Дартс {EMOJI['dart']}",
-        "football": f"Футбол {EMOJI['football']}",
-        "basketball": f"Баскетбол {EMOJI['basketball']}",
-        "bowling": f"Боулинг {EMOJI['bowling']}"
-    }
-    
-    game_name = game_names.get(game_type, "Игра")
-    
-    text = f"""
-🎮 *Поиск противника*
-
-Игра: *{game_name}*
-Режим: *{'Обычная игра' if game_mode == 'normal' else 'Игра на Stars'}*
-
-📝 *Напиши username противника:*
-(например: @username)
-    """
-    
-    await query.edit_message_text(text, parse_mode='Markdown')
-
-# Обработчик текстовых сообщений
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    if context.user_data.get('waiting_for_opponent'):
-        opponent_username = update.message.text.strip()
-        
-        if not opponent_username.startswith('@'):
-            await update.message.reply_text("❌ Пожалуйста, введите username начинающийся с @")
-            return
-        
-        game_type = context.user_data.get('game_type')
-        game_mode = context.user_data.get('game_mode')
-        
-        # Для игры на Stars запрашиваем ставку
-        if game_mode == 'stars':
-            context.user_data['opponent_username'] = opponent_username
-            context.user_data['waiting_for_bet'] = True
-            context.user_data['waiting_for_opponent'] = False
-            
-            user_balance = users_data.get(user_id, {}).get('balance', 0)
-            
-            await update.message.reply_text(
-                f"💰 *Введите ставку в Stars:*\n"
-                f"Ваш баланс: {user_balance} Stars\n"
-                f"Максимальная ставка: {user_balance} Stars",
-                parse_mode='Markdown'
-            )
-            return
-        
-        # Для обычной игры создаем запрос
-        request_id = f"{user_id}_{datetime.now().timestamp()}"
-        game_requests[request_id] = {
-            "from_user": user_id,
-            "from_username": update.effective_user.username or "Игрок",
-            "to_username": opponent_username,
-            "game_type": game_type,
-            "game_mode": game_mode,
-            "timestamp": datetime.now()
-        }
-        
-        context.user_data.clear()
-        
-        await update.message.reply_text(
-            f"✅ Запрос на игру отправлен пользователю {opponent_username}"
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS requests_history (
+            user_id INTEGER,
+            requests_change INTEGER,
+            reason TEXT,
+            admin_id INTEGER,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
-        
-        await start(update, context)
-    
-    elif context.user_data.get('waiting_for_bet'):
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+user_states = {}
+
+def keep_alive():
+    while True:
         try:
-            bet_amount = int(update.message.text)
-            user_balance = users_data.get(user_id, {}).get('balance', 0)
-            
-            if bet_amount <= 0:
-                await update.message.reply_text("❌ Ставка должна быть положительной")
-                return
-            
-            if bet_amount > user_balance:
-                await update.message.reply_text(f"❌ Недостаточно Stars. Ваш баланс: {user_balance}")
-                return
-            
-            opponent_username = context.user_data['opponent_username']
-            game_type = context.user_data['game_type']
-            
-            # Создаем запрос на игру с ставкой
-            request_id = f"{user_id}_{datetime.now().timestamp()}"
-            game_requests[request_id] = {
-                "from_user": user_id,
-                "from_username": update.effective_user.username or "Игрок",
-                "to_username": opponent_username,
-                "game_type": game_type,
-                "game_mode": "stars",
-                "bet_amount": bet_amount,
-                "timestamp": datetime.now()
-            }
-            
-            # Резервируем Stars
-            users_data[user_id]['balance'] -= bet_amount
-            
-            context.user_data.clear()
-            
-            await update.message.reply_text(
-                f"✅ Запрос на игру отправлен пользователю {opponent_username}\n"
-                f"💰 Ставка: {bet_amount} Stars\n"
-                f"💎 Ваш баланс: {users_data[user_id]['balance']} Stars\n\n"
-                f"⚡ Ожидайте подтверждения от противника"
-            )
-            
-        except ValueError:
-            await update.message.reply_text("❌ Пожалуйста, введите корректную сумму ставки")
-    
-    elif context.user_data.get('waiting_deposit'):
-        try:
-            amount = int(update.message.text)
-            if amount <= 0:
-                await update.message.reply_text("❌ Сумма должна быть положительной")
-                return
-            
-            keyboard = [[InlineKeyboardButton("💳 Оплатить", callback_data=f"pay_{amount}")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await update.message.reply_text(
-                f"💰 *Счёт на {amount} Stars* {EMOJI['star']}\n\n"
-                f"Для пополнения нажмите кнопку ниже:",
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
-            )
-            
-            context.user_data['deposit_amount'] = amount
-            
-        except ValueError:
-            await update.message.reply_text("❌ Пожалуйста, введите корректную сумму")
+            response = requests.get("https://one2-1-04er.onrender.com/", timeout=10)
+            print(f"Keep-alive запрос отправлен: {response.status_code}")
+        except Exception as e:
+            print(f"Ошибка keep-alive: {e}")
+        time.sleep(240)
 
-# Принять игру
-async def accept_game(query, context):
-    request_id = query.data.split("_")[1]
-    user_id = query.from_user.id
-    
-    if request_id not in game_requests:
-        await query.edit_message_text("❌ Запрос на игру устарел")
-        return
-    
-    game_request = game_requests[request_id]
-    
-    # Для игры на Stars проверяем баланс и создаем ожидающую игру
-    if game_request['game_mode'] == 'stars':
-        user_balance = users_data.get(user_id, {}).get('balance', 0)
-        bet_amount = game_request['bet_amount']
-        
-        if user_balance < bet_amount:
-            await query.edit_message_text(
-                f"❌ Недостаточно Stars для игры\n"
-                f"💰 Нужно: {bet_amount} Stars\n"
-                f"💎 Ваш баланс: {user_balance} Stars\n\n"
-                f"Пополните баланс чтобы принять игру"
-            )
-            return
-        
-        # Резервируем Stars у второго игрока
-        users_data[user_id]['balance'] -= bet_amount
-        
-        # Создаем ожидающую игру
-        game_id = f"game_{request_id}"
-        pending_games[game_id] = {
-            'player1': game_request['from_user'],
-            'player2': user_id,
-            'game_type': game_request['game_type'],
-            'game_mode': 'stars',
-            'bet_amount': bet_amount,
-            'player1_paid': True,
-            'player2_paid': False
-        }
-        
-        # Отправляем ссылку на оплату второму игроку
-        keyboard = [[InlineKeyboardButton("💳 Оплатить ставку", callback_data=f"pay_bet_{game_id}")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            f"✅ Вы приняли игру!\n"
-            f"💰 Ставка: {bet_amount} Stars\n"
-            f"🎮 Игра: {game_request['game_type']}\n\n"
-            f"💳 *Для начала игры необходимо оплатить ставку*",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        
-        # Уведомляем первого игрока
-        try:
-            await context.bot.send_message(
-                game_request['from_user'],
-                f"✅ Противник принял вашу игру!\n"
-                f"💰 Ставка: {bet_amount} Stars\n"
-                f"⏳ Ожидайте оплаты ставки противником\n\n"
-                f"⚡ Используйте /stop для отмены игры"
-            )
-        except:
-            pass
-        
-    else:
-        # Для обычной игры сразу начинаем
-        await query.edit_message_text("🎮 Начинаем обычную игру...")
-    
-    del game_requests[request_id]
+def add_user(user_id, username, first_name, last_name):
+    conn = sqlite3.connect('bot_stats.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT OR IGNORE INTO users (user_id, username, first_name, last_name, requests_balance)
+        VALUES (?, ?, ?, ?, 5)
+    ''', (user_id, username, first_name, last_name))
+    conn.commit()
+    conn.close()
 
-# Отклонить игру
-async def decline_game(query, context):
-    request_id = query.data.split("_")[1]
-    
-    if request_id in game_requests:
-        game_request = game_requests[request_id]
-        
-        # Возвращаем Stars если игра на Stars
-        if game_request['game_mode'] == 'stars':
-            users_data[game_request['from_user']]['balance'] += game_request['bet_amount']
-            
-            # Уведомляем первого игрока
-            try:
-                await context.bot.send_message(
-                    game_request['from_user'],
-                    f"❌ Противник отклонил вашу игру\n"
-                    f"💰 {game_request['bet_amount']} Stars возвращены на ваш баланс"
-                )
-            except:
-                pass
-        
-        del game_requests[request_id]
-    
-    await query.edit_message_text("❌ Игра отклонена")
+def update_subscription(user_id, subscribed):
+    conn = sqlite3.connect('bot_stats.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE users SET subscribed = ? WHERE user_id = ?
+    ''', (subscribed, user_id))
+    conn.commit()
+    conn.close()
 
-# Оплата ставки для игры на Stars
-async def process_bet_payment(query, context):
-    game_id = query.data.split("_")[2]
-    user_id = query.from_user.id
-    
-    if game_id not in pending_games:
-        await query.edit_message_text("❌ Игра не найдена")
-        return
-    
-    game_data = pending_games[game_id]
-    
-    if user_id != game_data['player2']:
-        await query.edit_message_text("❌ Это не ваша игра")
-        return
-    
-    # Помечаем что второй игрок оплатил
-    game_data['player2_paid'] = True
-    
-    # Начинаем игру
-    await start_stars_game(query, context, game_data)
-    
-    del pending_games[game_id]
+def get_user_balance(user_id):
+    conn = sqlite3.connect('bot_stats.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT requests_balance FROM users WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else 0
 
-# Запуск игры на Stars
-async def start_stars_game(query, context, game_data):
-    player1 = game_data['player1']
-    player2 = game_data['player2']
-    game_type = game_data['game_type']
-    bet_amount = game_data['bet_amount']
-    
-    # Игровая логика
-    if game_type == "dice":
-        # Бросок кубиков
-        roll1 = random.randint(1, 6)
-        roll2 = random.randint(1, 6)
-        
-        # Определяем победителя
-        if roll1 > roll2:
-            winner_id = player1
-            loser_id = player2
-            winner_roll = roll1
-            loser_roll = roll2
-        elif roll2 > roll1:
-            winner_id = player2
-            loser_id = player1
-            winner_roll = roll2
-            loser_roll = roll1
-        else:
-            # Ничья - случайный победитель 50/50
-            if random.choice([True, False]):
-                winner_id = player1
-                loser_id = player2
-                winner_roll = roll1
-                loser_roll = roll2
-            else:
-                winner_id = player2
-                loser_id = player1
-                winner_roll = roll2
-                loser_roll = roll1
-        
-        # Начисляем выигрыш
-        total_prize = bet_amount * 2
-        users_data[winner_id]['balance'] += total_prize
-        users_data[winner_id]['wins'] += 1
-        users_data[winner_id]['stars_won'] += bet_amount
-        users_data[winner_id]['games_played'] += 1
-        users_data[loser_id]['games_played'] += 1
-        
-        # Отправляем результаты
-        result_text = f"""
-🎲 *Поединок начался!* 🎲
+def update_user_balance(user_id, new_balance):
+    conn = sqlite3.connect('bot_stats.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE users SET requests_balance = ? WHERE user_id = ?
+    ''', (new_balance, user_id))
+    conn.commit()
+    conn.close()
 
-🎯 Игроки бросили кубики:
-
-{EMOJI['dice']} {users_data[player1]['username']}: {roll1}
-{EMOJI['dice']} {users_data[player2]['username']}: {roll2}
-
-🏆 *Победитель: {users_data[winner_id]['username']}*
-
-{winner_roll}️⃣ Победа: @{users_data[winner_id]['username']} - Выиграл {bet_amount} Stars⭐
-{loser_roll}️⃣ Поражение: @{users_data[loser_id]['username']}
-
-💰 Общий выигрыш: {total_prize} Stars
-        """
-        
-    # Отправляем результаты обоим игрокам
-    try:
-        await context.bot.send_message(player1, result_text, parse_mode='Markdown')
-        await context.bot.send_message(player2, result_text, parse_mode='Markdown')
-    except Exception as e:
-        logger.error(f"Ошибка отправки результатов: {e}")
-
-# Показать статистику
-async def show_stats(query, user_id):
-    user_data = users_data.get(user_id, {})
-    
-    wins = user_data.get("wins", 0)
-    games_played = user_data.get("games_played", 0)
-    stars_won = user_data.get("stars_won", 0)
-    balance = user_data.get("balance", 0)
-    
-    win_rate = (wins / games_played * 100) if games_played > 0 else 0
-    
-    text = f"""
-{EMOJI['stats']} *Твоя статистика* {EMOJI['stats']}
-
-{EMOJI['trophy']} *Победы:* {wins}
-{EMOJI['dice']} *Сыграно игр:* {games_played}
-{EMOJI['star']} *Выиграно Stars:* {stars_won}
-{EMOJI['money']} *Текущий баланс:* {balance} Stars
-{EMOJI['fire']} *Процент побед:* {win_rate:.1f}%
-
-{EMOJI['rocket']} _Продолжай в том же духе!_ {EMOJI['rocket']}
-    """
-    
-    keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="back_menu")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# Показать пополнение
-async def show_deposit(query, user_id):
-    user_data = users_data.get(user_id, {})
-    balance = user_data.get("balance", 0)
-    
-    text = f"""
-💳 *Пополнение баланса* 💳
-
-{EMOJI['star']} *Ваш баланс:* **{balance} Stars** {EMOJI['star']}
-
-{EMOJI['money']} *Напишите сумму для пополнения:*
-(Минимум: 1 Star)
-    """
-    
-    await query.edit_message_text(text, parse_mode='Markdown')
-    
-    # Устанавливаем флаг ожидания суммы пополнения
-    if 'user_data' not in context:
-        context.user_data = {}
-    context.user_data[user_id] = {'waiting_deposit': True}
-
-# Обработка платежа
-async def process_payment(query, user_id, amount):
-    user_data = users_data.get(user_id, {})
-    current_balance = user_data.get("balance", 0)
+def add_requests(user_id, amount, reason, admin_id=None):
+    current_balance = get_user_balance(user_id)
     new_balance = current_balance + amount
     
-    users_data[user_id]["balance"] = new_balance
-    
-    text = f"""
-🎉 *Пополнение успешно!* 🎉
+    conn = sqlite3.connect('bot_stats.db')
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET requests_balance = ? WHERE user_id = ?', (new_balance, user_id))
+    cursor.execute('''
+        INSERT INTO requests_history (user_id, requests_change, reason, admin_id)
+        VALUES (?, ?, ?, ?)
+    ''', (user_id, amount, reason, admin_id))
+    conn.commit()
+    conn.close()
+    return new_balance
 
-{EMOJI['star']} *Баланс пополнен на:* **{amount} Stars**
-{EMOJI['money']} *Текущий баланс:* **{new_balance} Stars**
+def use_request(user_id):
+    current_balance = get_user_balance(user_id)
+    if current_balance > 0:
+        new_balance = current_balance - 1
+        update_user_balance(user_id, new_balance)
+        return True, new_balance
+    return False, current_balance
 
-{EMOJI['fire']} _Теперь ты можешь играть на Stars!_ {EMOJI['fire']}
-    """
-    
-    keyboard = [[InlineKeyboardButton("◀️ В меню", callback_data="back_menu")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+def add_stat(user_id, action_type):
+    conn = sqlite3.connect('bot_stats.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO stats (user_id, action_type) VALUES (?, ?)
+    ''', (user_id, action_type))
+    conn.commit()
+    conn.close()
 
-# Показать вывод
-async def show_withdraw(query, user_id):
-    user_data = users_data.get(user_id, {})
-    balance = user_data.get("balance", 0)
+def split_long_prompt(prompt, max_words=20):
+    words = prompt.split()
+    if len(words) <= max_words:
+        return [prompt]
     
-    text = f"""
-🎁 *Вывод Stars* 🎁
+    parts = []
+    for i in range(0, len(words), max_words):
+        part = ' '.join(words[i:i + max_words])
+        parts.append(part)
+    return parts
 
-{EMOJI['star']} *Ваш баланс:* **{balance} Stars** {EMOJI['star']}
-
-{EMOJI['gift']} *Вывести Stars в реальные подарки:*
-Обменивай свои виртуальные Stars на крутые подарки!
-
-✨ _Чем больше Stars - тем лучше подарки!_ ✨
-    """
-    
-    if balance >= 1:
-        keyboard = [[InlineKeyboardButton(f"Вывести{EMOJI['money']}", callback_data="select_gift")]]
-    else:
-        keyboard = [[InlineKeyboardButton("Пополнить баланс", callback_data="deposit")]]
-    
-    keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="back_menu")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# Показать поддержку
-async def show_support(query):
-    text = f"""
-{EMOJI['support']} *Поддержка* {EMOJI['support']}
-
-🆘 *Есть вопросы?*
-Напиши нам: @rilyglrletukdetuluft
-
-{EMOJI['fire']} _Мы всегда рады помочь!_ {EMOJI['fire']}
-    """
-    
-    keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="back_menu")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# Выбор подарка
-async def select_gift(query, user_id):
-    user_data = users_data.get(user_id, {})
-    balance = user_data.get("balance", 0)
-    
-    text = f"""
-🎁 *Выбрать подарок* 🎁
-
-{EMOJI['star']} *Ваш баланс:* **{balance} Stars** {EMOJI['star']}
-
-Выберите подарок который хотите получить:
-    """
-    
-    keyboard = []
-    
-    # Кнопки в зависимости от баланса (пониженные цены)
-    if balance >= 1:
-        if balance >= 15:
-            keyboard.append([InlineKeyboardButton(f"{EMOJI['teddy']} Плюшевый мишка (15 Stars)", callback_data="gift_teddy")])
-            keyboard.append([InlineKeyboardButton(f"{EMOJI['heart']} Сердце (15 Stars)", callback_data="gift_heart")])
-        if balance >= 25:
-            keyboard.append([InlineKeyboardButton(f"{EMOJI['gift']} Подарочная коробка (25 Stars)", callback_data="gift_box")])
-            keyboard.append([InlineKeyboardButton(f"{EMOJI['rose']} Букет роз (25 Stars)", callback_data="gift_rose")])
-        if balance >= 50:
-            keyboard.append([InlineKeyboardButton(f"{EMOJI['cake']} Торт (50 Stars)", callback_data="gift_cake")])
-            keyboard.append([InlineKeyboardButton(f"{EMOJI['flower']} Цветы (50 Stars)", callback_data="gift_flowers")])
-            keyboard.append([InlineKeyboardButton(f"{EMOJI['rocket']} Ракета (50 Stars)", callback_data="gift_rocket")])
-        if balance >= 100:
-            keyboard.append([InlineKeyboardButton(f"{EMOJI['ring']} Кольцо (100 Stars)", callback_data="gift_ring")])
-            keyboard.append([InlineKeyboardButton(f"{EMOJI['diamond']} Алмаз (100 Stars)", callback_data="gift_diamond")])
-            keyboard.append([InlineKeyboardButton(f"{EMOJI['trophy']} Кубок (100 Stars)", callback_data="gift_trophy")])
-    
-    keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="withdraw")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# Обработка выбора подарка
-async def process_gift_selection(query, user_id, gift_type):
-    user_data = users_data.get(user_id, {})
-    balance = user_data.get("balance", 0)
-    
-    # Пониженные цены на подарки
-    gift_prices = {
-        "teddy": 15, "heart": 15,
-        "box": 25, "rose": 25,
-        "cake": 50, "flowers": 50, "rocket": 50,
-        "ring": 100, "diamond": 100, "trophy": 100
+def get_stats():
+    conn = sqlite3.connect('bot_stats.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM users')
+    total_users = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "code_generated"')
+    codes_generated = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "plugin_generated"')
+    plugins_generated = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "code_modified"')
+    codes_modified = cursor.fetchone()[0]
+    cursor.execute('SELECT SUM(requests_balance) FROM users')
+    total_requests = cursor.fetchone()[0] or 0
+    conn.close()
+    return {
+        'total_users': total_users,
+        'codes_generated': codes_generated,
+        'plugins_generated': plugins_generated,
+        'codes_modified': codes_modified,
+        'total_requests': total_requests
     }
+
+def check_subscription(user_id):
+    try:
+        chat_member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        return chat_member.status in ['member', 'administrator', 'creator']
+    except:
+        return False
+
+class GeminiChat:
+    def __init__(self, model=SELECTED_MODEL):
+        self.url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={API_KEY}"
+        self.headers = {'Content-Type': 'application/json'}
     
-    price = gift_prices.get(gift_type, 0)
+    def process_in_parts(self, message, is_plugin=False, image_data=None):
+        parts = split_long_prompt(message)
+        
+        full_response = ""
+        for i, part in enumerate(parts):
+            try:
+                if is_plugin:
+                    response = self.send_message(part, is_code_request=False, is_plugin_request=True, image_data=image_data)
+                else:
+                    response = self.send_message(part, is_code_request=True, image_data=image_data)
+                
+                if response.startswith('❌'):
+                    return response
+                
+                full_response += response + "\n\n"
+                
+            except Exception as e:
+                return f"❌ Ошибка при обработке части {i+1}: {str(e)}"
+        
+        return full_response
     
-    if balance >= price:
-        # Списание Stars
-        users_data[user_id]["balance"] = balance - price
+    def send_message(self, message, is_code_request=True, is_plugin_request=False, image_data=None):
+        if len(message.split()) > 20 and not image_data:
+            return self.process_in_parts(message, is_plugin_request, image_data)
         
-        gift_names = {
-            "teddy": "Плюшевый мишка 🧸",
-            "heart": "Сердце 💝", 
-            "box": "Подарочная коробка 🎁",
-            "rose": "Букет роз 🌹",
-            "cake": "Торт 🎂",
-            "flowers": "Цветы 💐",
-            "rocket": "Ракета 🚀",
-            "ring": "Кольцо 💍",
-            "diamond": "Алмаз 💎",
-            "trophy": "Кубок 🏆"
-        }
-        
-        gift_name = gift_names.get(gift_type, 'Подарок')
-        
-        # Сообщение об успешном выводе
-        success_text = f"""
-🎉 *Поздравляем!* 🎉
+        if is_plugin_request:
+            prompt = f"""
+            Создай Python плагин для exteragram. Запрос: {message}
 
-{EMOJI['gift']} Вы успешно обменяли *{price} Stars* на подарок:
-*{gift_name}*
+            Формат плагина:
+            __id__ = "уникальный_ид"
+            __name__ = "Название плагина" 
+            __description__ = "Описание плагина"
+            __author__ = "@автор"
+            __version__ = "1.0.0"
+            __min_version__ = "11.12.0"
 
-{EMOJI['star']} *Новый баланс:* **{balance - price} Stars**
+            from base_plugin import BasePlugin, MethodHook
+            from hook_utils import find_class
+            from java.lang import Long as JavaLong, Boolean as JavaBoolean
 
-✨ _Спасибо за игру! Ваш подарок будет доставлен._ ✨
-        """
-        
-        keyboard = [[InlineKeyboardButton("◀️ В меню", callback_data="back_menu")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(success_text, reply_markup=reply_markup, parse_mode='Markdown')
-        
-        # Отправляем сам подарок
-        gift_emoji = gift_names[gift_type].split()[-1]  # Берем эмодзи из названия
-        
-        # Отправляем сообщение с подарком
-        gift_message = f"""
-🎁 *Вам доставлен подарок!* 🎁
+            class MyPlugin(BasePlugin):
+                def on_plugin_load(self):
+                    # код загрузки плагина
 
-*{gift_name}*
+                def create_settings(self):
+                    # настройки плагина
+                    return []
 
-{gift_emoji} {gift_emoji} {gift_emoji}
-{gift_emoji} {gift_emoji} {gift_emoji}  
-{gift_emoji} {gift_emoji} {gift_emoji}
+            Создай полноценный рабочий плагин с комментариями.
+            """
+        elif is_code_request:
+            prompt = f"Создай Python код для: {message}. Добавь комментарии и описание."
+        else:
+            prompt = f"Улучши код: {message['code']}. Запрос: {message['request']}. Сохрани функциональность."
+        
+        # Подготовка содержимого с изображением если есть
+        contents = {"contents": [{"parts": [{"text": prompt}]}]}
+        
+        if image_data:
+            contents["contents"][0]["parts"].insert(0, {
+                "inline_data": {
+                    "mime_type": "image/jpeg",
+                    "data": image_data
+                }
+            })
+        
+        try:
+            response = requests.post(self.url, headers=self.headers, json=contents, timeout=60)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if 'candidates' in result and result['candidates']:
+                    return result['candidates'][0]['content']['parts'][0]['text']
+                return "❌ Ошибка: Пустой ответ от API"
+            else:
+                error_data = response.json()
+                error_msg = error_data.get('error', {}).get('message', 'Неизвестная ошибка')
+                return f"❌ Ошибка API ({response.status_code}): {error_msg}"
+                
+        except requests.exceptions.Timeout:
+            return "❌ Извините, бот не смог обработать запрос, попытайтесь уменьшить промт, либо попробовать заново"
+        except Exception as e:
+            return f"❌ Извините, бот не смог обработать запрос, попытайтесь уменьшить промт, либо попробовать заново"
 
-🎉 _Наслаждайтесь вашим подарком!_
-        """
-        
-        await query.message.reply_text(gift_message, parse_mode='Markdown')
-        
+def parse_code_response(response):
+    try:
+        if 'Описание:' in response and 'Код:' in response:
+            parts = response.split('Код:')
+            description = parts[0].replace('Описание:', '').strip()
+            code = parts[1].strip()
+            return description, code
+        if '```python' in response:
+            parts = response.split('```python')
+            if len(parts) >= 2:
+                code_part = parts[1].split('```')[0]
+                description = parts[0].strip()
+                return description, code_part.strip()
+        if '```' in response:
+            parts = response.split('```')
+            if len(parts) >= 3:
+                code = parts[1].strip()
+                description = parts[0].strip() if parts[0].strip() else "Сгенерированный код"
+                return description, code
+        return "Сгенерированный код", response
+    except Exception as e:
+        return "Ошибка при разборе ответа", response
+
+def process_image_message(message):
+    """Обработка сообщения с изображением и текстом"""
+    caption = message.caption if message.caption else ""
+    image_file = None
+    
+    if message.photo:
+        # Берем самое большое фото
+        file_id = message.photo[-1].file_id
+    elif message.document and message.document.mime_type.startswith('image/'):
+        file_id = message.document.file_id
     else:
-        text = f"""
-❌ *Недостаточно Stars*
+        return caption, None
+    
+    try:
+        file_info = bot.get_file(file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        image_data = base64.b64encode(downloaded_file).decode('utf-8')
+        return caption, image_data
+    except Exception as e:
+        print(f"Ошибка обработки изображения: {e}")
+        return caption, None
 
-Для этого подарка нужно {price} Stars
-Ваш баланс: {balance} Stars
+@app.route('/')
+def home():
+    return "GeniAi Bot is running!"
 
-Пополните баланс чтобы получить этот подарок!
-        """
+@app.route('/health')
+def health():
+    return "OK"
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    update = request.get_json()
+    if update:
+        bot.process_new_updates([telebot.types.Update.de_json(update)])
+    return 'OK'
+
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    user_id = message.from_user.id
+    username = message.from_user.username
+    first_name = message.from_user.first_name
+    last_name = message.from_user.last_name
+    add_user(user_id, username, first_name, last_name)
+    if check_subscription(user_id):
+        update_subscription(user_id, 1)
+        show_main_menu(message)
+    else:
+        update_subscription(user_id, 0)
+        show_subscription_request(message)
+
+def show_subscription_request(message):
+    markup = types.InlineKeyboardMarkup()
+    subscribe_btn = types.InlineKeyboardButton('📢 Подписаться', url='https://t.me/GeniAi')
+    check_btn = types.InlineKeyboardButton('✅ Проверить подписку', callback_data='check_subscription')
+    markup.add(subscribe_btn)
+    markup.add(check_btn)
+    text = "📢 Подпишитесь на канал чтобы продолжить:\n\nhttps://t.me/GeniAi\n\nПосле подписки нажмите ✅ Проверить подписку"
+    bot.send_message(message.chat.id, text, reply_markup=markup)
+
+def show_main_menu(message):
+    user_id = message.from_user.id
+    balance = get_user_balance(user_id)
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    btn1 = types.InlineKeyboardButton('🧑‍💻 Написать код', callback_data='write_code')
+    btn2 = types.InlineKeyboardButton('🔌 Написать плагин', callback_data='write_plugin')
+    btn3 = types.InlineKeyboardButton('⚡ Изменить готовый', callback_data='modify_code')
+    btn4 = types.InlineKeyboardButton('📊 Статистика', callback_data='stats')
+    btn5 = types.InlineKeyboardButton('💎 Подписка', callback_data='subscription')
+    btn6 = types.InlineKeyboardButton('👨‍💻 Автор бота', callback_data='author')
+    if message.from_user.id == ADMIN_ID:
+        btn7 = types.InlineKeyboardButton('👑 Админ панель', callback_data='admin_panel')
+        markup.add(btn1, btn2, btn3, btn4, btn5, btn6, btn7)
+    else:
+        markup.add(btn1, btn2, btn3, btn4, btn5, btn6)
+    welcome_text = f"""🤖 Привет, я GeniAi!
+Ваш помощник для создания Python кодов
+
+💼 Баланс: {balance} запросов
+📝 Можно описывать запросы подробно
+🖼️ Можно отправлять скриншоты с описанием
+
+Выберите действие:"""
+    bot.send_message(message.chat.id, welcome_text, reply_markup=markup)
+    user_states[message.chat.id] = 'main_menu'
+
+def show_subscription_info(message):
+    user_id = message.from_user.id
+    balance = get_user_balance(user_id)
+    text = f"""💎 Информация о подписке
+
+💼 У вас {balance} запросов
+
+🛒 Купить запросы: @xostcodingkrytoy
+
+📋 Для покупки отправьте админу:
+- Ваш ID: {user_id}
+- Количество запросов
+- Скриншот оплаты
+
+💳 1 запрос = 2 торта"""
+    markup = types.InlineKeyboardMarkup()
+    buy_btn = types.InlineKeyboardButton('🛒 Купить запросы', url='https://t.me/xostcodingkrytoy')
+    back_btn = types.InlineKeyboardButton('🔙 Назад', callback_data='back_to_menu')
+    markup.add(buy_btn)
+    markup.add(back_btn)
+    bot.send_message(message.chat.id, text, reply_markup=markup)
+
+def show_admin_panel(message):
+    stats = get_stats()
+    text = f"""👑 Админ панель
+
+📊 Статистика:
+👥 Пользователей: {stats['total_users']}
+💻 Кодов создано: {stats['codes_generated']}
+🔌 Плагинов создано: {stats['plugins_generated']}
+⚡ Кодов изменено: {stats['codes_modified']}
+📈 Всего запросов: {stats['total_requests']}
+
+⚙️ Команды:
+/request [id] [количество] - выдать запросы
+/users - список пользователей"""
+    bot.send_message(message.chat.id, text)
+
+@bot.message_handler(commands=['request'])
+def handle_request_command(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    try:
+        _, user_id, amount = message.text.split()
+        user_id = int(user_id)
+        amount = int(amount)
+        new_balance = add_requests(user_id, amount, "Выдача админом", ADMIN_ID)
+        try:
+            user_message = f"""🎉 Спасибо за покупку!
+📦 Вам выдано {amount} запросов
+💼 Текущий баланс: {new_balance} запросов"""
+            bot.send_message(user_id, user_message)
+        except: pass
+        bot.send_message(message.chat.id, f"✅ Пользователю {user_id} выдано {amount} запросов. Новый баланс: {new_balance}")
+    except ValueError:
+        bot.send_message(message.chat.id, "❌ Неправильный формат. Используйте: /request [id] [количество]")
+
+@bot.message_handler(commands=['users'])
+def handle_users_command(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    conn = sqlite3.connect('bot_stats.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT user_id, username, first_name, requests_balance FROM users ORDER BY created_at DESC LIMIT 10')
+    users = cursor.fetchall()
+    conn.close()
+    if not users:
+        bot.send_message(message.chat.id, "❌ Пользователей нет")
+        return
+    text = "👥 Последние 10 пользователей:\n\n"
+    for user in users:
+        user_id, username, first_name, balance = user
+        user_info = f"@{username}" if username else first_name
+        text += f"🆔 {user_id} | 👤 {user_info} | 💼 {balance}\n"
+    bot.send_message(message.chat.id, text)
+
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callback(call):
+    user_id = call.from_user.id
+    chat_id = call.message.chat.id
+    if call.data == 'check_subscription':
+        if check_subscription(user_id):
+            update_subscription(user_id, 1)
+            bot.answer_callback_query(call.id, "✅ Спасибо за подписку!")
+            show_main_menu(call.message)
+        else:
+            bot.answer_callback_query(call.id, "❌ Вы еще не подписались на канал!")
+    elif check_subscription(user_id):
+        if call.data == 'write_code':
+            balance = get_user_balance(user_id)
+            if balance <= 0:
+                bot.answer_callback_query(call.id, "❌ У вас закончились запросы!")
+                show_subscription_info(call.message)
+            else:
+                msg = bot.send_message(chat_id, "🧑‍💻 Опишите какой код нужен (можно отправить скриншот с подписью):\n\n💡 Пример: 'калькулятор на Python с GUI'")
+                user_states[chat_id] = 'waiting_code_request'
+        elif call.data == 'write_plugin':
+            balance = get_user_balance(user_id)
+            if balance <= 0:
+                bot.answer_callback_query(call.id, "❌ У вас закончились запросы!")
+                show_subscription_info(call.message)
+            else:
+                msg = bot.send_message(chat_id, "🔌 Опишите какой плагин нужен (можно отправить скриншот с подписью):\n\n💡 Пример: 'плагин для смены аватарки в Telegram'")
+                user_states[chat_id] = 'waiting_plugin_request'
+        elif call.data == 'modify_code':
+            balance = get_user_balance(user_id)
+            if balance <= 0:
+                bot.answer_callback_query(call.id, "❌ У вас закончились запросы!")
+                show_subscription_info(call.message)
+            else:
+                msg = bot.send_message(chat_id, "⚡ Отправьте .py файл для изменения (можно с описанием изменений в подписи)\n\n💡 Можно описывать изменения подробно")
+                user_states[chat_id] = 'waiting_code_file'
+        elif call.data == 'stats':
+            stats = get_stats()
+            user_balance = get_user_balance(user_id)
+            stats_text = f"""📊 Статистика бота:
+
+👥 Всего пользователей: {stats['total_users']}
+💻 Создано кодов: {stats['codes_generated']}
+🔌 Создано плагинов: {stats['plugins_generated']}
+⚡ Изменено кодов: {stats['codes_modified']}
+💼 Ваш баланс: {user_balance} запросов"""
+            bot.send_message(chat_id, stats_text)
+        elif call.data == 'subscription':
+            show_subscription_info(call.message)
+        elif call.data == 'author':
+            bot.send_message(chat_id, "👨‍💻 Автор бота: @xostcodingkrytoy")
+        elif call.data == 'admin_panel':
+            if user_id == ADMIN_ID:
+                show_admin_panel(call.message)
+        elif call.data == 'back_to_menu':
+            show_main_menu(call.message)
+    else:
+        bot.answer_callback_query(call.id, "❌ Сначала подпишитесь на канал!")
+        show_subscription_request(call.message)
+
+@bot.message_handler(content_types=['photo', 'text'])
+def handle_code_requests(message):
+    if not check_subscription(message.from_user.id):
+        show_subscription_request(message)
+        return
         
-        keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="select_gift")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+    chat_id = message.chat.id
+    state = user_states.get(chat_id)
+    
+    if state == 'waiting_code_request':
+        process_code_request_with_image(message)
+    elif state == 'waiting_plugin_request':
+        process_plugin_request_with_image(message)
+    elif state == 'waiting_modification_request':
+        process_modification_request_with_image(message)
+
+def process_code_request_with_image(message):
+    if not check_subscription(message.from_user.id):
+        show_subscription_request(message)
+        return
         
-        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    user_id = message.from_user.id
+    success, new_balance = use_request(user_id)
+    if not success:
+        bot.send_message(message.chat.id, "❌ У вас закончились запросы! Нажмите на подписку чтобы купить новые")
+        show_subscription_info(message)
+        return
+        
+    chat_id = message.chat.id
+    
+    # Получаем текст и изображение
+    user_request, image_data = process_image_message(message)
+    
+    if not user_request:
+        bot.send_message(chat_id, "❌ Пожалуйста, добавьте описание к запросу")
+        return
+        
+    if user_request.startswith('/'):
+        show_main_menu(message)
+        return
+        
+    processing_msg = bot.send_message(chat_id, "⏳ Код готовится...")
+    try:
+        gemini = GeminiChat()
+        response = gemini.send_message(user_request, is_code_request=True, image_data=image_data)
+        if response.startswith('❌'):
+            bot.delete_message(chat_id, processing_msg.message_id)
+            bot.send_message(chat_id, response)
+            add_requests(user_id, 1, "Возврат при ошибке")
+        else:
+            description, code = parse_code_response(response)
+            file_buffer = io.BytesIO(code.encode('utf-8'))
+            file_buffer.name = "generated_code.py"
+            bot.delete_message(chat_id, processing_msg.message_id)
+            bot.send_document(chat_id, file_buffer, 
+                             caption=f"✅ Готовый код\n\n📝 Описание:\n{description}\n\n💼 Осталось запросов: {new_balance}")
+            user_states[chat_id] = 'main_menu'
+            add_stat(user_id, "code_generated")
+    except Exception as e:
+        bot.delete_message(chat_id, processing_msg.message_id)
+        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь уменьшить промт, либо попробовать заново")
+        add_requests(user_id, 1, "Возврат при ошибке")
 
-# Главная функция
-def main():
-    # Ваш токен бота
-    TOKEN = "7611839139:AAEtf4j8itdKLjfo9YGRLhIOqPorpqtg2LY"
+def process_plugin_request_with_image(message):
+    if not check_subscription(message.from_user.id):
+        show_subscription_request(message)
+        return
+        
+    user_id = message.from_user.id
+    success, new_balance = use_request(user_id)
+    if not success:
+        bot.send_message(message.chat.id, "❌ У вас закончились запросы! Нажмите на подписку чтобы купить новые")
+        show_subscription_info(message)
+        return
+        
+    chat_id = message.chat.id
     
-    # Создаем Application
-    application = Application.builder().token(TOKEN).build()
+    # Получаем текст и изображение
+    user_request, image_data = process_image_message(message)
     
-    # Обработчики команд
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("stop", stop_game))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # Запуск бота
-    print("Бот запущен...")
-    application.run_polling()
+    if not user_request:
+        bot.send_message(chat_id, "❌ Пожалуйста, добавьте описание к запросу")
+        return
+        
+    if user_request.startswith('/'):
+        show_main_menu(message)
+        return
+        
+    processing_msg = bot.send_message(chat_id, "⏳ Плагин готовится...")
+    try:
+        gemini = GeminiChat()
+        response = gemini.send_message(user_request, is_code_request=False, is_plugin_request=True, image_data=image_data)
+        if response.startswith('❌'):
+            bot.delete_message(chat_id, processing_msg.message_id)
+            bot.send_message(chat_id, response)
+            add_requests(user_id, 1, "Возврат при ошибке")
+        else:
+            description, code = parse_code_response(response)
+            file_buffer = io.BytesIO(code.encode('utf-8'))
+            file_buffer.name = "generated_plugin.plugin"
+            bot.delete_message(chat_id, processing_msg.message_id)
+            bot.send_document(chat_id, file_buffer, 
+                             caption=f"✅ Готовый плагин\n\n📝 Описание:\n{description}\n\n💼 Осталось запросов: {new_balance}")
+            user_states[chat_id] = 'main_menu'
+            add_stat(user_id, "plugin_generated")
+    except Exception as e:
+        bot.delete_message(chat_id, processing_msg.message_id)
+        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь уменьшить промт, либо попробовать заново")
+        add_requests(user_id, 1, "Возврат при ошибке")
 
-if __name__ == '__main__':
-    main()
+@bot.message_handler(content_types=['document'])
+def handle_document(message):
+    if not check_subscription(message.from_user.id):
+        show_subscription_request(message)
+        return
+    chat_id = message.chat.id
+    if user_states.get(chat_id) == 'waiting_code_file':
+        if message.document.file_name and message.document.file_name.endswith('.py'):
+            try:
+                file_info = bot.get_file(message.document.file_id)
+                downloaded_file = bot.download_file(file_info.file_path)
+                code_content = downloaded_file.decode('utf-8')
+                user_states[chat_id] = {'state': 'waiting_modification_request', 'code': code_content}
+                
+                # Если есть подпись к файлу, используем ее как запрос на изменение
+                if message.caption:
+                    process_modification_request_with_image(message)
+                else:
+                    msg = bot.send_message(chat_id, "⚡ Что изменить в коде? (можно отправить скриншот с подписью):\n\n💡 Пример: 'добавь обработку ошибок и логирование'")
+            except Exception as e:
+                bot.send_message(chat_id, f"❌ Ошибка при чтении файла: {str(e)}")
+        else:
+            bot.send_message(chat_id, "❌ Пожалуйста, отправьте именно Python файл (.py)")
+    else:
+        bot.send_message(chat_id, "❌ Сначала нажмите '⚡ Изменить готовый'")
+
+def process_modification_request_with_image(message):
+    if not check_subscription(message.from_user.id):
+        show_subscription_request(message)
+        return
+        
+    user_id = message.from_user.id
+    success, new_balance = use_request(user_id)
+    if not success:
+        bot.send_message(message.chat.id, "❌ У вас закончились запросы! Нажмите на подписку чтобы купить новые")
+        show_subscription_info(message)
+        return
+        
+    chat_id = message.chat.id
+    
+    # Получаем текст и изображение
+    modification_request, image_data = process_image_message(message)
+    
+    if not modification_request:
+        bot.send_message(chat_id, "❌ Пожалуйста, добавьте описание изменений")
+        return
+        
+    user_data = user_states.get(chat_id, {})
+    original_code = user_data.get('code', '')
+    if not original_code:
+        bot.send_message(chat_id, "❌ Не удалось найти исходный код. Попробуйте снова.")
+        return
+        
+    processing_msg = bot.send_message(chat_id, "⏳ Вносятся изменения...")
+    try:
+        gemini = GeminiChat()
+        request_data = {'code': original_code, 'request': modification_request}
+        response = gemini.send_message(request_data, is_code_request=False, image_data=image_data)
+        if response.startswith('❌'):
+            bot.delete_message(chat_id, processing_msg.message_id)
+            bot.send_message(chat_id, response)
+            add_requests(user_id, 1, "Возврат при ошибке")
+        else:
+            description, modified_code = parse_code_response(response)
+            file_buffer = io.BytesIO(modified_code.encode('utf-8'))
+            file_buffer.name = "modified_code.py"
+            bot.delete_message(chat_id, processing_msg.message_id)
+            bot.send_document(chat_id, file_buffer,
+                             caption=f"✅ Измененный код\n\n📝 Что сделано:\n{description}\n\n💼 Осталось запросов: {new_balance}")
+            user_states[chat_id] = 'main_menu'
+            add_stat(user_id, "code_modified")
+    except Exception as e:
+        bot.delete_message(chat_id, processing_msg.message_id)
+        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь уменьшить промт, либо попробовать заново")
+        add_requests(user_id, 1, "Возврат при ошибке")
+
+@bot.message_handler(func=lambda message: True)
+def handle_other_messages(message):
+    if not check_subscription(message.from_user.id):
+        show_subscription_request(message)
+        return
+    chat_id = message.chat.id
+    if user_states.get(chat_id) not in ['waiting_code_request', 'waiting_plugin_request', 'waiting_code_file', 'waiting_modification_request']:
+        show_main_menu(message)
+
+def start_keep_alive():
+    keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+    keep_alive_thread.start()
+    print("Keep-alive запущен")
+
+if __name__ == "__main__":
+    start_keep_alive()
+    bot.remove_webhook()
+    port = int(os.environ.get('PORT', 10000))
+    print(f"Bot starting on port {port}")
+    try:
+        WEBHOOK_URL = "https://one2-1-04er.onrender.com/webhook"
+        bot.set_webhook(url=WEBHOOK_URL)
+        print(f"Webhook установлен: {WEBHOOK_URL}")
+        app.run(host='0.0.0.0', port=port, debug=False)
+    except Exception as e:
+        print(f"Используем поллинг... Ошибка: {e}")
+        bot.infinity_polling()
