@@ -139,42 +139,6 @@ def add_stat(user_id, action_type):
     conn.commit()
     conn.close()
 
-def split_long_prompt(prompt, max_words=20):
-    words = prompt.split()
-    if len(words) <= max_words:
-        return [prompt]
-    
-    parts = []
-    for i in range(0, len(words), max_words):
-        part = ' '.join(words[i:i + max_words])
-        parts.append(part)
-    return parts
-
-def get_stats():
-    conn = sqlite3.connect('bot_stats.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT COUNT(*) FROM users')
-    total_users = cursor.fetchone()[0]
-    cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "code_generated"')
-    codes_generated = cursor.fetchone()[0]
-    cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "plugin_generated"')
-    plugins_generated = cursor.fetchone()[0]
-    cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "code_modified"')
-    codes_modified = cursor.fetchone()[0]
-    cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "project_generated"')
-    projects_generated = cursor.fetchone()[0]
-    cursor.execute('SELECT SUM(requests_balance) FROM users')
-    total_requests = cursor.fetchone()[0] or 0
-    conn.close()
-    return {
-        'total_users': total_users,
-        'codes_generated': codes_generated,
-        'plugins_generated': plugins_generated,
-        'codes_modified': codes_modified,
-        'projects_generated': projects_generated,
-        'total_requests': total_requests
-    }
-
 def check_subscription(user_id):
     try:
         chat_member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
@@ -187,33 +151,7 @@ class GeminiChat:
         self.url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={API_KEY}"
         self.headers = {'Content-Type': 'application/json'}
     
-    def process_in_parts(self, message, is_plugin=False, image_data=None, is_project=False):
-        parts = split_long_prompt(message)
-        
-        full_response = ""
-        for i, part in enumerate(parts):
-            try:
-                if is_plugin:
-                    response = self.send_message(part, is_code_request=False, is_plugin_request=True, image_data=image_data)
-                elif is_project:
-                    response = self.send_message(part, is_code_request=False, is_project_request=True, image_data=image_data)
-                else:
-                    response = self.send_message(part, is_code_request=True, image_data=image_data)
-                
-                if response.startswith('❌'):
-                    return response
-                
-                full_response += response + "\n\n"
-                
-            except Exception as e:
-                return f"❌ Ошибка при обработке части {i+1}: {str(e)}"
-        
-        return full_response
-    
     def send_message(self, message, is_code_request=True, is_plugin_request=False, is_project_request=False, image_data=None):
-        if len(message.split()) > 20 and not image_data:
-            return self.process_in_parts(message, is_plugin_request, image_data, is_project_request)
-        
         if is_plugin_request:
             prompt = f"""
             Создай Python плагин для exteragram. Запрос: {message}
@@ -301,30 +239,31 @@ class GeminiChat:
                 return f"❌ Ошибка API ({response.status_code}): {error_msg}"
                 
         except requests.exceptions.Timeout:
-            return "❌ Извините, бот не смог обработать запрос, попытайтесь уменьшить промт, либо попробовать заново"
+            return "❌ Время ожидания истекло. Попробуйте еще раз."
         except Exception as e:
-            return f"❌ Извините, бот не смог обработать запрос, попытайтесь уменьшить промт, либо попробовать заново"
+            return f"❌ Ошибка соединения: {str(e)}"
 
 def parse_code_response(response):
     try:
-        if 'Описание:' in response and 'Код:' in response:
-            parts = response.split('Код:')
-            description = parts[0].replace('Описание:', '').strip()
-            code = parts[1].strip()
-            return description, code
+        # Пытаемся найти код между ```python и ```
         if '```python' in response:
             parts = response.split('```python')
             if len(parts) >= 2:
                 code_part = parts[1].split('```')[0]
-                description = parts[0].strip()
+                description = parts[0].strip() if parts[0].strip() else "Сгенерированный код"
                 return description, code_part.strip()
+        
+        # Пытаемся найти код между ``` и ```
         if '```' in response:
             parts = response.split('```')
             if len(parts) >= 3:
                 code = parts[1].strip()
                 description = parts[0].strip() if parts[0].strip() else "Сгенерированный код"
                 return description, code
+        
+        # Если нет блоков кода, возвращаем весь ответ как код
         return "Сгенерированный код", response
+        
     except Exception as e:
         return "Ошибка при разборе ответа", response
 
@@ -513,6 +452,31 @@ def show_admin_panel(message):
 /users - список пользователей"""
     bot.send_message(message.chat.id, text)
 
+def get_stats():
+    conn = sqlite3.connect('bot_stats.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM users')
+    total_users = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "code_generated"')
+    codes_generated = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "plugin_generated"')
+    plugins_generated = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "code_modified"')
+    codes_modified = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM stats WHERE action_type = "project_generated"')
+    projects_generated = cursor.fetchone()[0]
+    cursor.execute('SELECT SUM(requests_balance) FROM users')
+    total_requests = cursor.fetchone()[0] or 0
+    conn.close()
+    return {
+        'total_users': total_users,
+        'codes_generated': codes_generated,
+        'plugins_generated': plugins_generated,
+        'codes_modified': codes_modified,
+        'projects_generated': projects_generated,
+        'total_requests': total_requests
+    }
+
 @bot.message_handler(commands=['request'])
 def handle_request_command(message):
     if message.from_user.id != ADMIN_ID:
@@ -665,26 +629,33 @@ def process_code_request_with_image(message):
         return
         
     processing_msg = bot.send_message(chat_id, "⏳ Код готовится...")
-    try:
-        gemini = GeminiChat()
-        response = gemini.send_message(user_request, is_code_request=True, image_data=image_data)
-        if response.startswith('❌'):
+    
+    def send_code():
+        try:
+            gemini = GeminiChat()
+            response = gemini.send_message(user_request, is_code_request=True, image_data=image_data)
+            
+            if response.startswith('❌'):
+                bot.delete_message(chat_id, processing_msg.message_id)
+                bot.send_message(chat_id, response)
+                add_requests(user_id, 1, "Возврат при ошибке")
+            else:
+                description, code = parse_code_response(response)
+                file_buffer = io.BytesIO(code.encode('utf-8'))
+                file_buffer.name = "generated_code.py"
+                bot.delete_message(chat_id, processing_msg.message_id)
+                bot.send_document(chat_id, file_buffer, 
+                                 caption=f"✅ Готовый код\n\n📝 Описание:\n{description}\n\n💰 Осталось запросов: {new_balance}")
+                user_states[chat_id] = 'main_menu'
+                add_stat(user_id, "code_generated")
+        except Exception as e:
             bot.delete_message(chat_id, processing_msg.message_id)
-            bot.send_message(chat_id, response)
+            bot.send_message(chat_id, f"❌ Ошибка: {str(e)}")
             add_requests(user_id, 1, "Возврат при ошибке")
-        else:
-            description, code = parse_code_response(response)
-            file_buffer = io.BytesIO(code.encode('utf-8'))
-            file_buffer.name = "generated_code.py"
-            bot.delete_message(chat_id, processing_msg.message_id)
-            bot.send_document(chat_id, file_buffer, 
-                             caption=f"✅ Готовый код\n\n📝 Описание:\n{description}\n\n💰 Осталось запросов: {new_balance}")
-            user_states[chat_id] = 'main_menu'
-            add_stat(user_id, "code_generated")
-    except Exception as e:
-        bot.delete_message(chat_id, processing_msg.message_id)
-        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь позже")
-        add_requests(user_id, 1, "Возврат при ошибке")
+    
+    # Запускаем в отдельном потоке для скорости
+    thread = threading.Thread(target=send_code)
+    thread.start()
 
 def process_project_request_with_image(message):
     if not check_subscription(message.from_user.id):
@@ -713,37 +684,43 @@ def process_project_request_with_image(message):
         return
         
     processing_msg = bot.send_message(chat_id, "🚀 Собираю проект...")
-    try:
-        gemini = GeminiChat()
-        response = gemini.send_message(user_request, is_project_request=True, image_data=image_data)
-        if response.startswith('❌'):
-            bot.delete_message(chat_id, processing_msg.message_id)
-            bot.send_message(chat_id, response)
-            add_requests(user_id, 1, "Возврат при ошибке")
-        else:
-            files = parse_project_response(response)
-            if not files:
+    
+    def send_project():
+        try:
+            gemini = GeminiChat()
+            response = gemini.send_message(user_request, is_project_request=True, image_data=image_data)
+            
+            if response.startswith('❌'):
                 bot.delete_message(chat_id, processing_msg.message_id)
-                bot.send_message(chat_id, "❌ Не удалось распознать структуру проекта. Попробуйте еще раз.")
+                bot.send_message(chat_id, response)
                 add_requests(user_id, 1, "Возврат при ошибке")
-                return
-            
-            # Создаем ZIP архив
-            zip_buffer = create_zip_from_files(files)
-            zip_buffer.name = "project.zip"
-            
-            # Создаем описание файлов
-            file_list = "\n".join([f"📄 {filename}" for filename in files.keys()])
-            
+            else:
+                files = parse_project_response(response)
+                if not files:
+                    bot.delete_message(chat_id, processing_msg.message_id)
+                    bot.send_message(chat_id, "❌ Не удалось распознать структуру проекта. Попробуйте еще раз.")
+                    add_requests(user_id, 1, "Возврат при ошибке")
+                    return
+                
+                # Создаем ZIP архив
+                zip_buffer = create_zip_from_files(files)
+                zip_buffer.name = "project.zip"
+                
+                # Создаем описание файлов
+                file_list = "\n".join([f"📄 {filename}" for filename in files.keys()])
+                
+                bot.delete_message(chat_id, processing_msg.message_id)
+                bot.send_document(chat_id, zip_buffer,
+                                 caption=f"🚀 Готовый проект!\n\n📁 Файлы в проекте:\n{file_list}\n\n💰 Осталось запросов: {new_balance}")
+                user_states[chat_id] = 'main_menu'
+                add_stat(user_id, "project_generated")
+        except Exception as e:
             bot.delete_message(chat_id, processing_msg.message_id)
-            bot.send_document(chat_id, zip_buffer,
-                             caption=f"🚀 Готовый проект!\n\n📁 Файлы в проекте:\n{file_list}\n\n💰 Осталось запросов: {new_balance}")
-            user_states[chat_id] = 'main_menu'
-            add_stat(user_id, "project_generated")
-    except Exception as e:
-        bot.delete_message(chat_id, processing_msg.message_id)
-        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь позже")
-        add_requests(user_id, 1, "Возврат при ошибке")
+            bot.send_message(chat_id, f"❌ Ошибка: {str(e)}")
+            add_requests(user_id, 1, "Возврат при ошибке")
+    
+    thread = threading.Thread(target=send_project)
+    thread.start()
 
 def process_plugin_request_with_image(message):
     if not check_subscription(message.from_user.id):
@@ -772,26 +749,32 @@ def process_plugin_request_with_image(message):
         return
         
     processing_msg = bot.send_message(chat_id, "⏳ Плагин готовится...")
-    try:
-        gemini = GeminiChat()
-        response = gemini.send_message(user_request, is_code_request=False, is_plugin_request=True, image_data=image_data)
-        if response.startswith('❌'):
+    
+    def send_plugin():
+        try:
+            gemini = GeminiChat()
+            response = gemini.send_message(user_request, is_code_request=False, is_plugin_request=True, image_data=image_data)
+            
+            if response.startswith('❌'):
+                bot.delete_message(chat_id, processing_msg.message_id)
+                bot.send_message(chat_id, response)
+                add_requests(user_id, 1, "Возврат при ошибке")
+            else:
+                description, code = parse_code_response(response)
+                file_buffer = io.BytesIO(code.encode('utf-8'))
+                file_buffer.name = "generated_plugin.plugin"
+                bot.delete_message(chat_id, processing_msg.message_id)
+                bot.send_document(chat_id, file_buffer, 
+                                 caption=f"✅ Готовый плагин\n\n📝 Описание:\n{description}\n\n💰 Осталось запросов: {new_balance}")
+                user_states[chat_id] = 'main_menu'
+                add_stat(user_id, "plugin_generated")
+        except Exception as e:
             bot.delete_message(chat_id, processing_msg.message_id)
-            bot.send_message(chat_id, response)
+            bot.send_message(chat_id, f"❌ Ошибка: {str(e)}")
             add_requests(user_id, 1, "Возврат при ошибке")
-        else:
-            description, code = parse_code_response(response)
-            file_buffer = io.BytesIO(code.encode('utf-8'))
-            file_buffer.name = "generated_plugin.plugin"
-            bot.delete_message(chat_id, processing_msg.message_id)
-            bot.send_document(chat_id, file_buffer, 
-                             caption=f"✅ Готовый плагин\n\n📝 Описание:\n{description}\n\n💰 Осталось запросов: {new_balance}")
-            user_states[chat_id] = 'main_menu'
-            add_stat(user_id, "plugin_generated")
-    except Exception as e:
-        bot.delete_message(chat_id, processing_msg.message_id)
-        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь позже")
-        add_requests(user_id, 1, "Возврат при ошибке")
+    
+    thread = threading.Thread(target=send_plugin)
+    thread.start()
 
 @bot.message_handler(content_types=['document'])
 def handle_document(message):
@@ -848,27 +831,33 @@ def process_modification_request_with_image(message):
         return
         
     processing_msg = bot.send_message(chat_id, "⏳ Вносятся изменения...")
-    try:
-        gemini = GeminiChat()
-        request_data = {'code': original_code, 'request': modification_request}
-        response = gemini.send_message(request_data, is_code_request=False, image_data=image_data)
-        if response.startswith('❌'):
+    
+    def send_modified_code():
+        try:
+            gemini = GeminiChat()
+            request_data = {'code': original_code, 'request': modification_request}
+            response = gemini.send_message(request_data, is_code_request=False, image_data=image_data)
+            
+            if response.startswith('❌'):
+                bot.delete_message(chat_id, processing_msg.message_id)
+                bot.send_message(chat_id, response)
+                add_requests(user_id, 1, "Возврат при ошибке")
+            else:
+                description, modified_code = parse_code_response(response)
+                file_buffer = io.BytesIO(modified_code.encode('utf-8'))
+                file_buffer.name = "modified_code.py"
+                bot.delete_message(chat_id, processing_msg.message_id)
+                bot.send_document(chat_id, file_buffer,
+                                 caption=f"✅ Измененный код\n\n📝 Что сделано:\n{description}\n\n💰 Осталось запросов: {new_balance}")
+                user_states[chat_id] = 'main_menu'
+                add_stat(user_id, "code_modified")
+        except Exception as e:
             bot.delete_message(chat_id, processing_msg.message_id)
-            bot.send_message(chat_id, response)
+            bot.send_message(chat_id, f"❌ Ошибка: {str(e)}")
             add_requests(user_id, 1, "Возврат при ошибке")
-        else:
-            description, modified_code = parse_code_response(response)
-            file_buffer = io.BytesIO(modified_code.encode('utf-8'))
-            file_buffer.name = "modified_code.py"
-            bot.delete_message(chat_id, processing_msg.message_id)
-            bot.send_document(chat_id, file_buffer,
-                             caption=f"✅ Измененный код\n\n📝 Что сделано:\n{description}\n\n💰 Осталось запросов: {new_balance}")
-            user_states[chat_id] = 'main_menu'
-            add_stat(user_id, "code_modified")
-    except Exception as e:
-        bot.delete_message(chat_id, processing_msg.message_id)
-        bot.send_message(chat_id, f"❌ Извините, бот не смог обработать запрос, попытайтесь позже")
-        add_requests(user_id, 1, "Возврат при ошибке")
+    
+    thread = threading.Thread(target=send_modified_code)
+    thread.start()
 
 @bot.message_handler(func=lambda message: True)
 def handle_other_messages(message):
