@@ -594,15 +594,15 @@ def handle_code_requests(message):
     state = user_states.get(chat_id)
     
     if state == 'waiting_code_request':
-        process_code_request_with_image(message)
+        process_code_request(message)
     elif state == 'waiting_project_request':
-        process_project_request_with_image(message)
+        process_project_request(message)
     elif state == 'waiting_plugin_request':
-        process_plugin_request_with_image(message)
+        process_plugin_request(message)
     elif state == 'waiting_modification_request':
-        process_modification_request_with_image(message)
+        process_modification_request(message)
 
-def process_code_request_with_image(message):
+def process_code_request(message):
     if not check_subscription(message.from_user.id):
         show_subscription_request(message)
         return
@@ -630,34 +630,29 @@ def process_code_request_with_image(message):
         
     processing_msg = bot.send_message(chat_id, "⏳ Код готовится...")
     
-    def send_code():
-        try:
-            gemini = GeminiChat()
-            response = gemini.send_message(user_request, is_code_request=True, image_data=image_data)
-            
-            if response.startswith('❌'):
-                bot.delete_message(chat_id, processing_msg.message_id)
-                bot.send_message(chat_id, response)
-                add_requests(user_id, 1, "Возврат при ошибке")
-            else:
-                description, code = parse_code_response(response)
-                file_buffer = io.BytesIO(code.encode('utf-8'))
-                file_buffer.name = "generated_code.py"
-                bot.delete_message(chat_id, processing_msg.message_id)
-                bot.send_document(chat_id, file_buffer, 
-                                 caption=f"✅ Готовый код\n\n📝 Описание:\n{description}\n\n💰 Осталось запросов: {new_balance}")
-                user_states[chat_id] = 'main_menu'
-                add_stat(user_id, "code_generated")
-        except Exception as e:
+    try:
+        gemini = GeminiChat()
+        response = gemini.send_message(user_request, is_code_request=True, image_data=image_data)
+        
+        if response.startswith('❌'):
             bot.delete_message(chat_id, processing_msg.message_id)
-            bot.send_message(chat_id, f"❌ Ошибка: {str(e)}")
+            bot.send_message(chat_id, response)
             add_requests(user_id, 1, "Возврат при ошибке")
-    
-    # Запускаем в отдельном потоке для скорости
-    thread = threading.Thread(target=send_code)
-    thread.start()
+        else:
+            description, code = parse_code_response(response)
+            file_buffer = io.BytesIO(code.encode('utf-8'))
+            file_buffer.name = "generated_code.py"
+            bot.delete_message(chat_id, processing_msg.message_id)
+            bot.send_document(chat_id, file_buffer, 
+                             caption=f"✅ Готовый код\n\n📝 Описание:\n{description}\n\n💰 Осталось запросов: {new_balance}")
+            user_states[chat_id] = 'main_menu'
+            add_stat(user_id, "code_generated")
+    except Exception as e:
+        bot.delete_message(chat_id, processing_msg.message_id)
+        bot.send_message(chat_id, f"❌ Ошибка: {str(e)}")
+        add_requests(user_id, 1, "Возврат при ошибке")
 
-def process_project_request_with_image(message):
+def process_project_request(message):
     if not check_subscription(message.from_user.id):
         show_subscription_request(message)
         return
@@ -685,44 +680,40 @@ def process_project_request_with_image(message):
         
     processing_msg = bot.send_message(chat_id, "🚀 Собираю проект...")
     
-    def send_project():
-        try:
-            gemini = GeminiChat()
-            response = gemini.send_message(user_request, is_project_request=True, image_data=image_data)
-            
-            if response.startswith('❌'):
-                bot.delete_message(chat_id, processing_msg.message_id)
-                bot.send_message(chat_id, response)
-                add_requests(user_id, 1, "Возврат при ошибке")
-            else:
-                files = parse_project_response(response)
-                if not files:
-                    bot.delete_message(chat_id, processing_msg.message_id)
-                    bot.send_message(chat_id, "❌ Не удалось распознать структуру проекта. Попробуйте еще раз.")
-                    add_requests(user_id, 1, "Возврат при ошибке")
-                    return
-                
-                # Создаем ZIP архив
-                zip_buffer = create_zip_from_files(files)
-                zip_buffer.name = "project.zip"
-                
-                # Создаем описание файлов
-                file_list = "\n".join([f"📄 {filename}" for filename in files.keys()])
-                
-                bot.delete_message(chat_id, processing_msg.message_id)
-                bot.send_document(chat_id, zip_buffer,
-                                 caption=f"🚀 Готовый проект!\n\n📁 Файлы в проекте:\n{file_list}\n\n💰 Осталось запросов: {new_balance}")
-                user_states[chat_id] = 'main_menu'
-                add_stat(user_id, "project_generated")
-        except Exception as e:
+    try:
+        gemini = GeminiChat()
+        response = gemini.send_message(user_request, is_project_request=True, image_data=image_data)
+        
+        if response.startswith('❌'):
             bot.delete_message(chat_id, processing_msg.message_id)
-            bot.send_message(chat_id, f"❌ Ошибка: {str(e)}")
+            bot.send_message(chat_id, response)
             add_requests(user_id, 1, "Возврат при ошибке")
-    
-    thread = threading.Thread(target=send_project)
-    thread.start()
+        else:
+            files = parse_project_response(response)
+            if not files:
+                bot.delete_message(chat_id, processing_msg.message_id)
+                bot.send_message(chat_id, "❌ Не удалось распознать структуру проекта. Попробуйте еще раз.")
+                add_requests(user_id, 1, "Возврат при ошибке")
+                return
+            
+            # Создаем ZIP архив
+            zip_buffer = create_zip_from_files(files)
+            zip_buffer.name = "project.zip"
+            
+            # Создаем описание файлов
+            file_list = "\n".join([f"📄 {filename}" for filename in files.keys()])
+            
+            bot.delete_message(chat_id, processing_msg.message_id)
+            bot.send_document(chat_id, zip_buffer,
+                             caption=f"🚀 Готовый проект!\n\n📁 Файлы в проекте:\n{file_list}\n\n💰 Осталось запросов: {new_balance}")
+            user_states[chat_id] = 'main_menu'
+            add_stat(user_id, "project_generated")
+    except Exception as e:
+        bot.delete_message(chat_id, processing_msg.message_id)
+        bot.send_message(chat_id, f"❌ Ошибка: {str(e)}")
+        add_requests(user_id, 1, "Возврат при ошибке")
 
-def process_plugin_request_with_image(message):
+def process_plugin_request(message):
     if not check_subscription(message.from_user.id):
         show_subscription_request(message)
         return
@@ -750,31 +741,27 @@ def process_plugin_request_with_image(message):
         
     processing_msg = bot.send_message(chat_id, "⏳ Плагин готовится...")
     
-    def send_plugin():
-        try:
-            gemini = GeminiChat()
-            response = gemini.send_message(user_request, is_code_request=False, is_plugin_request=True, image_data=image_data)
-            
-            if response.startswith('❌'):
-                bot.delete_message(chat_id, processing_msg.message_id)
-                bot.send_message(chat_id, response)
-                add_requests(user_id, 1, "Возврат при ошибке")
-            else:
-                description, code = parse_code_response(response)
-                file_buffer = io.BytesIO(code.encode('utf-8'))
-                file_buffer.name = "generated_plugin.plugin"
-                bot.delete_message(chat_id, processing_msg.message_id)
-                bot.send_document(chat_id, file_buffer, 
-                                 caption=f"✅ Готовый плагин\n\n📝 Описание:\n{description}\n\n💰 Осталось запросов: {new_balance}")
-                user_states[chat_id] = 'main_menu'
-                add_stat(user_id, "plugin_generated")
-        except Exception as e:
+    try:
+        gemini = GeminiChat()
+        response = gemini.send_message(user_request, is_code_request=False, is_plugin_request=True, image_data=image_data)
+        
+        if response.startswith('❌'):
             bot.delete_message(chat_id, processing_msg.message_id)
-            bot.send_message(chat_id, f"❌ Ошибка: {str(e)}")
+            bot.send_message(chat_id, response)
             add_requests(user_id, 1, "Возврат при ошибке")
-    
-    thread = threading.Thread(target=send_plugin)
-    thread.start()
+        else:
+            description, code = parse_code_response(response)
+            file_buffer = io.BytesIO(code.encode('utf-8'))
+            file_buffer.name = "generated_plugin.plugin"
+            bot.delete_message(chat_id, processing_msg.message_id)
+            bot.send_document(chat_id, file_buffer, 
+                             caption=f"✅ Готовый плагин\n\n📝 Описание:\n{description}\n\n💰 Осталось запросов: {new_balance}")
+            user_states[chat_id] = 'main_menu'
+            add_stat(user_id, "plugin_generated")
+    except Exception as e:
+        bot.delete_message(chat_id, processing_msg.message_id)
+        bot.send_message(chat_id, f"❌ Ошибка: {str(e)}")
+        add_requests(user_id, 1, "Возврат при ошибке")
 
 @bot.message_handler(content_types=['document'])
 def handle_document(message):
@@ -792,9 +779,9 @@ def handle_document(message):
                 
                 # Если есть подпись к файлу, используем ее как запрос на изменение
                 if message.caption:
-                    process_modification_request_with_image(message)
+                    process_modification_request(message)
                 else:
-                    msg = bot.send_message(chat_id, "⚡ Что изменить в коде?")
+                    bot.send_message(chat_id, "⚡ Что изменить в коде?")
             except Exception as e:
                 bot.send_message(chat_id, f"❌ Ошибка при чтении файла: {str(e)}")
         else:
@@ -802,7 +789,7 @@ def handle_document(message):
     else:
         bot.send_message(chat_id, "❌ Сначала нажмите '⚡ Изменить готовый'")
 
-def process_modification_request_with_image(message):
+def process_modification_request(message):
     if not check_subscription(message.from_user.id):
         show_subscription_request(message)
         return
@@ -832,32 +819,28 @@ def process_modification_request_with_image(message):
         
     processing_msg = bot.send_message(chat_id, "⏳ Вносятся изменения...")
     
-    def send_modified_code():
-        try:
-            gemini = GeminiChat()
-            request_data = {'code': original_code, 'request': modification_request}
-            response = gemini.send_message(request_data, is_code_request=False, image_data=image_data)
-            
-            if response.startswith('❌'):
-                bot.delete_message(chat_id, processing_msg.message_id)
-                bot.send_message(chat_id, response)
-                add_requests(user_id, 1, "Возврат при ошибке")
-            else:
-                description, modified_code = parse_code_response(response)
-                file_buffer = io.BytesIO(modified_code.encode('utf-8'))
-                file_buffer.name = "modified_code.py"
-                bot.delete_message(chat_id, processing_msg.message_id)
-                bot.send_document(chat_id, file_buffer,
-                                 caption=f"✅ Измененный код\n\n📝 Что сделано:\n{description}\n\n💰 Осталось запросов: {new_balance}")
-                user_states[chat_id] = 'main_menu'
-                add_stat(user_id, "code_modified")
-        except Exception as e:
+    try:
+        gemini = GeminiChat()
+        request_data = {'code': original_code, 'request': modification_request}
+        response = gemini.send_message(request_data, is_code_request=False, image_data=image_data)
+        
+        if response.startswith('❌'):
             bot.delete_message(chat_id, processing_msg.message_id)
-            bot.send_message(chat_id, f"❌ Ошибка: {str(e)}")
+            bot.send_message(chat_id, response)
             add_requests(user_id, 1, "Возврат при ошибке")
-    
-    thread = threading.Thread(target=send_modified_code)
-    thread.start()
+        else:
+            description, modified_code = parse_code_response(response)
+            file_buffer = io.BytesIO(modified_code.encode('utf-8'))
+            file_buffer.name = "modified_code.py"
+            bot.delete_message(chat_id, processing_msg.message_id)
+            bot.send_document(chat_id, file_buffer,
+                             caption=f"✅ Измененный код\n\n📝 Что сделано:\n{description}\n\n💰 Осталось запросов: {new_balance}")
+            user_states[chat_id] = 'main_menu'
+            add_stat(user_id, "code_modified")
+    except Exception as e:
+        bot.delete_message(chat_id, processing_msg.message_id)
+        bot.send_message(chat_id, f"❌ Ошибка: {str(e)}")
+        add_requests(user_id, 1, "Возврат при ошибке")
 
 @bot.message_handler(func=lambda message: True)
 def handle_other_messages(message):
