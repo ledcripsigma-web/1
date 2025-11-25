@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Panel</title>
+    <style>
+        :root {
+            --dark-bg: #1e1e1e;
+            --medium-bg: #2d2d2d;
+            --light-bg: #3c3c3c;
+            --text: #f0f0f0;
+            --accent: #4fc3f7;
+            --success: #66bb6a;
+            --warning: #ffca28;
+            --error: #ff6b6b;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: var(--dark-bg);
+            color: var(--text);
+            padding: 20px;
+        }
+        
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .admin-header h1 {
+            color: var(--accent);
+        }
+        
+        .admin-logout {
+            padding: 10px 20px;
+            background-color: var(--error);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .section {
+            background-color: var(--medium-bg);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+        }
+        
+        h2 {
+            margin-bottom: 20px;
+            color: var(--warning);
+            border-bottom: 1px solid var(--light-bg);
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            background-color: var(--light-bg);
+            color: var(--text);
+            border: none;
+            border-radius: 5px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            background-color: var(--accent);
+            color: var(--dark-bg);
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        
+        .btn:hover {
+            background-color: #29b6f6;
+        }
+        
+        .btn-danger {
+            background-color: var(--error);
+        }
+        
+        .btn-success {
+            background-color: var(--success);
+        }
+        
+        .btn-warning {
+            background-color: var(--warning);
+            color: var(--dark-bg);
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .data-table th, .data-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--light-bg);
+        }
+        
+        .data-table th {
+            background-color: var(--light-bg);
+        }
+        
+        .flex-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .flex-row > div {
+            flex: 1;
+        }
+        
+        .file-upload-wrapper {
+            position: relative;
+            margin-bottom: 15px;
+        }
+        
+        .file-upload-button {
+            display: block;
+            padding: 12px 20px;
+            background-color: var(--accent);
+            color: var(--dark-bg);
+            border-radius: 5px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        
+        .file-upload-button:hover {
+            background-color: #29b6f6;
+        }
+        
+        .file-upload-input {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        
+        .file-list {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: var(--light-bg);
+            border-radius: 5px;
+            min-height: 50px;
+        }
+        
+        .file-item {
+            padding: 8px;
+            border-bottom: 1px solid var(--medium-bg);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .file-icon {
+            margin-right: 10px;
+            font-size: 20px;
+        }
+        
+        .file-info {
+            flex: 1;
+        }
+        
+        .file-name {
+            font-weight: bold;
+            word-break: break-all;
+        }
+        
+        .file-size {
+            font-size: 12px;
+            color: #aaa;
+        }
+        
+        .no-files {
+            color: #777;
+            text-align: center;
+            padding: 15px;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--light-bg);
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .tab.active {
+            border-bottom: 3px solid var(--accent);
+            color: var(--accent);
+        }
+        
+        .tab-content {
+            display: block;
+        }
+        
+        .product-preview {
+            max-width: 100px;
+            max-height: 100px;
+            display: block;
+            margin: 10px auto;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            background-color: var(--medium-bg);
+            margin: 5% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 600px;
+            position: relative;
+        }
+        
+        .close-modal {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .status-active {
+            background-color: var(--success);
+            color: white;
+        }
+        
+        .status-blocked {
+            background-color: var(--error);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <div class="admin-header">
+            <h1>Административная панель</h1>
+            <button class="admin-logout" onclick="location.href='/logout'">Выйти</button>
+        </div>
+        
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('users')">Пользователи</div>
+            <div class="tab" onclick="showTab('market')">Торговая</div>
+            <div class="tab" onclick="showTab('gifts')">Подарки</div>
+            <div class="tab" onclick="showTab('edit')">Редактирование</div>
+        </div>
+        
+        <!-- Секция управления пользователями -->
+        <div id="usersTab" class="tab-content">
+            <div class="section">
+                <h2>Управление пользователями</h2>
+                <div class="flex-row">
+                    <div>
+                        <h3>Выдать звезды</h3>
+                        <div class="form-group">
+                            <label for="userSelect">Пользователь</label>
+                            <select id="userSelect">
+                                <!-- Заполнится через JS -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="starsAmount">Количество звезд</label>
+                            <input type="number" id="starsAmount" min="1" value="1000">
+                        </div>
+                        <button class="btn" onclick="giveStars()">Выдать звезды</button>
+                    </div>
+                    
+                    <div>
+                        <h3>Выдать подарок</h3>
+                        <div class="form-group">
+                            <label for="userSelectGift">Пользователь</label>
+                            <select id="userSelectGift">
+                                <!-- Заполнится через JS -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="productSelect">Подарок</label>
+                            <select id="productSelect">
+                                <!-- Заполнится через JS -->
+                            </select>
+                        </div>
+                        <button class="btn" onclick="giveGift()">Выдать подарок</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Блокировка пользователей</h2>
+                <table class="data-table" id="usersTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Имя пользователя</th>
+                            <th>Баланс</th>
+                            <th>Статус</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Заполнится через JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Секция управления торговой площадкой -->
+        <div id="marketTab" class="tab-content" style="display:none;">
+            <div class="section">
+                <h2>Управление торговой площадкой</h2>
+                <div class="flex-row">
+                    <div>
+                        <h3>Лимиты цен</h3>
+                        <div class="form-group">
+                            <label for="minPrice">Минимальная цена</label>
+                            <input type="number" id="minPrice" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="maxPrice">Максимальная цена</label>
+                            <input type="number" id="maxPrice" min="1">
+                        </div>
+                        <button class="btn" onclick="updatePriceLimits()">Обновить лимиты</button>
+                    </div>
+                    
+                    <div>
+                        <h3>Удалить товар</h3>
+                        <div class="form-group">
+                            <label for="marketItemSelect">Товар на площадке</label>
+                            <select id="marketItemSelect">
+                                <!-- Заполнится через JS -->
+                            </select>
+                        </div>
+                        <button class="btn btn-danger" onclick="removeMarketItem()">Удалить товар</button>
+                        <p style="margin-top: 10px; font-size: 14px;">
+                            При удалении товара он снимается с продажи
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>Текущие товары на площадке</h2>
+                <table class="data-table" id="marketTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Название</th>
+                            <th>Цена</th>
+                            <th>Продавец</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Заполнится через JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Секция управления подарками -->
+        <div id="giftsTab" class="tab-content" style="display:none;">
+            <div class="section">
+                <h2>Добавить новый подарок</h2>
+                <div class="form-group">
+                    <label for="giftName">Название подарка</label>
+                    <input type="text" id="giftName" placeholder="Введите название">
+                </div>
+                <div class="form-group">
+                    <label for="giftPrice">Цена (в звездах)</label>
+                    <input type="number" id="giftPrice" min="1" value="50">
+                </div>
+                <div class="form-group">
+                    <label for="giftLimit">Лимит (оставьте пустым, если без лимита)</label>
+                    <input type="number" id="giftLimit" min="0" placeholder="Лимит">
+                </div>
+                <div class="form-group">
+                    <label for="giftImage">Основное изображение</label>
+                    <input type="file" id="giftImage" accept="image/*">
+                    <div id="imagePreview"></div>
+                </div>
+                <div class="form-group">
+                    <label for="improveFolder">Папка для улучшений</label>
+                    <input type="text" id="improveFolder" placeholder="Название папки">
+                </div>
+                <button class="btn btn-success" onclick="addNewGift()">Добавить подарок</button>
+            </div>
+            
+            <div class="section">
+                <h2>Добавить улучшения для подарка</h2>
+                <div class="form-group">
+                    <label for="giftSelect">Подарок</label>
+                    <select id="giftSelect">
+                        <!-- Заполнится через JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Изображения улучшений</label>
+                    <div class="file-upload-wrapper">
+                        <div class="file-upload-button">Выбрать файлы</div>
+                        <input 
+                            type="file" 
+                            id="improveImages" 
+                            class="file-upload-input" 
+                            multiple 
+                            accept="image/*"
+                        >
+                    </div>
+                    <div id="fileList" class="file-list">
+                        <div class="no-files">Файлы не выбраны</div>
+                    </div>
+                </div>
+                <button class="btn" onclick="uploadImprovements()">Загрузить улучшения</button>
+                <div id="uploadStatus" style="margin-top: 10px;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>Существующие подарки</h2>
+                <table class="data-table" id="giftsTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Название</th>
+                            <th>Цена</th>
+                            <th>Лимит</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Заполнится через JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Секция редактирования подарков -->
+        <div id="editTab" class="tab-content" style="display:none;">
+            <div class="section">
+                <h2>Редактирование подарков</h2>
+                <div class="form-group">
+                    <label for="editProductSelect">Выберите подарок для редактирования</label>
+                    <select id="editProductSelect" onchange="loadProductInfo()">
+                        <option value="">-- Выберите подарок --</option>
+                        <!-- Заполнится через JS -->
+                    </select>
+                </div>
+
+                <div id="productEditForm" style="display: none;">
+                    <div class="flex-row">
+                        <div>
+                            <h3>Основная информация</h3>
+                            <div class="form-group">
+                                <label for="editProductName">Название подарка</label>
+                                <input type="text" id="editProductName">
+                            </div>
+                            <div class="form-group">
+                                <label for="editProductPrice">Цена (в звездах)</label>
+                                <input type="number" id="editProductPrice" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label for="editProductLimit">Лимит (оставьте пустым, если без лимита)</label>
+                                <input type="number" id="editProductLimit" min="0" placeholder="Лимит">
+                            </div>
+                            <div class="form-group">
+                                <label for="editImproveFolder">Папка для улучшений</label>
+                                <input type="text" id="editImproveFolder">
+                            </div>
+                            <div class="form-group">
+                                <label for="editProductImage">Новое основное изображение (оставьте пустым, чтобы не менять)</label>
+                                <input type="file" id="editProductImage" accept="image/*">
+                                <div id="editImagePreview"></div>
+                            </div>
+                            <button class="btn btn-success" onclick="updateProduct()">Сохранить изменения</button>
+                        </div>
+                        
+                        <div>
+                            <h3>Улучшения подарка</h3>
+                            <div id="improvementsList">
+                                <p>Улучшения загружаются...</p>
+                            </div>
+                            
+                            <div class="form-group" style="margin-top: 20px;">
+                                <label>Добавить новые улучшения</label>
+                                <div class="file-upload-wrapper">
+                                    <div class="file-upload-button">Выбрать файлы</div>
+                                    <input 
+                                        type="file" 
+                                        id="newImproveImages" 
+                                        class="file-upload-input" 
+                                        multiple 
+                                        accept="image/*"
+                                    >
+                                </div>
+                                <div id="newFileList" class="file-list">
+                                    <div class="no-files">Файлы не выбраны</div>
+                                </div>
+                            </div>
+                            <button class="btn" onclick="addNewImprovements()">Добавить улучшения</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для подтверждения блокировки -->
+    <div id="blockModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal('blockModal')">&times;</span>
+            <h2 id="modalTitle">Блокировка пользователя</h2>
+            <p id="modalMessage">Вы уверены, что хотите заблокировать этого пользователя?</p>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-danger" id="confirmBlockBtn">Заблокировать</button>
+                <button class="btn" onclick="closeModal('blockModal')">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentProductId = null;
+        let currentUserId = null;
+        let currentBlockAction = null;
+
+        // Загрузка данных при открытии админки
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAdminData();
+            
+            // Превью изображения для добавления подарка
+            document.getElementById('giftImage').addEventListener('change', function(e) {
+                const preview = document.getElementById('imagePreview');
+                preview.innerHTML = '';
+                
+                if (this.files && this.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.className = 'product-preview';
+                        preview.appendChild(img);
+                    }
+                    reader.readAsDataURL(this.files[0]);
+                }
+            });
+
+            // Превью изображения для редактирования подарка
+            document.getElementById('editProductImage').addEventListener('change', function(e) {
+                const preview = document.getElementById('editImagePreview');
+                preview.innerHTML = '';
+                
+                if (this.files && this.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.className = 'product-preview';
+                        preview.appendChild(img);
+                    }
+                    reader.readAsDataURL(this.files[0]);
+                }
+            });
+
+            // Обработчик выбора файлов улучшений
+            setupFileInput('improveImages', 'fileList');
+            setupFileInput('newImproveImages', 'newFileList');
+        });
+        
+        function setupFileInput(inputId, listId) {
+            const fileInput = document.getElementById(inputId);
+            const fileList = document.getElementById(listId);
+            
+            fileInput.addEventListener('change', function() {
+                fileList.innerHTML = '';
+                
+                if (this.files.length === 0) {
+                    fileList.innerHTML = '<div class="no-files">Файлы не выбраны</div>';
+                    return;
+                }
+                
+                for (let i = 0; i < this.files.length; i++) {
+                    const file = this.files[i];
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    
+                    fileItem.innerHTML = `
+                        <div>
+                            <div class="file-icon">🖼️</div>
+                            <div class="file-info">
+                                <div class="file-name">${file.name}</div>
+                                <div class="file-size">${formatFileSize(file.size)}</div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    fileList.appendChild(fileItem);
+                }
+            });
+        }
+        
+        function loadAdminData() {
+            fetch('/admin/get_data')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Заполняем пользователей
+                        populateUsers(data.users);
+                        
+                        // Заполняем продукты
+                        populateProducts(data.products);
+                        
+                        // Заполняем товары на площадке
+                        populateMarketItems(data.market_items);
+                        
+                        // Заполняем лимиты цен
+                        document.getElementById('minPrice').value = data.price_settings.min_price;
+                        document.getElementById('maxPrice').value = data.price_settings.max_price;
+                    }
+                });
+        }
+        
+        function populateUsers(users) {
+            const userSelect = document.getElementById('userSelect');
+            const userSelectGift = document.getElementById('userSelectGift');
+            const usersTable = document.getElementById('usersTable').querySelector('tbody');
+            
+            userSelect.innerHTML = '';
+            userSelectGift.innerHTML = '';
+            usersTable.innerHTML = '';
+            
+            users.forEach(user => {
+                // Для выпадающих списков
+                const option = document.createElement('option');
+                option.value = user.tg_id;
+                option.textContent = `${user.username} (${user.tg_id})`;
+                userSelect.appendChild(option.cloneNode(true));
+                userSelectGift.appendChild(option);
+                
+                // Для таблицы
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${user.tg_id}</td>
+                    <td>${user.username}</td>
+                    <td>${user.balance}⭐</td>
+                    <td>
+                        <span class="status-badge ${user.is_blocked ? 'status-blocked' : 'status-active'}">
+                            ${user.is_blocked ? 'Заблокирован' : 'Активен'}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn ${user.is_blocked ? 'btn-success' : 'btn-danger'}" 
+                                onclick="toggleUserBlock(${user.tg_id}, ${!user.is_blocked})">
+                            ${user.is_blocked ? 'Разблокировать' : 'Заблокировать'}
+                        </button>
+                    </td>
+                `;
+                usersTable.appendChild(row);
+            });
+        }
+        
+        function populateProducts(products) {
+            const productSelect = document.getElementById('productSelect');
+            const giftSelect = document.getElementById('giftSelect');
+            const editProductSelect = document.getElementById('editProductSelect');
+            const giftsTable = document.getElementById('giftsTable').querySelector('tbody');
+            
+            productSelect.innerHTML = '';
+            giftSelect.innerHTML = '';
+            editProductSelect.innerHTML = '<option value="">-- Выберите подарок --</option>';
+            giftsTable.innerHTML = '';
+            
+            products.forEach(product => {
+                // Для выпадающих списков
+                const option = document.createElement('option');
+                option.value = product.id;
+                option.textContent = product.name;
+                productSelect.appendChild(option.cloneNode(true));
+                giftSelect.appendChild(option.cloneNode(true));
+                
+                // Для выпадающего списка редактирования
+                const editOption = document.createElement('option');
+                editOption.value = product.id;
+                editOption.textContent = `${product.name} (ID: ${product.id})`;
+                editProductSelect.appendChild(editOption);
+                
+                // Для таблицы
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${product.id}</td>
+                    <td>${product.name}</td>
+                    <td>${product.price}</td>
+                    <td>${product.limit || 'Без лимита'}</td>
+                    <td>
+                        <button class="btn btn-danger" onclick="deleteProduct(${product.id})">Удалить</button>
+                    </td>
+                `;
+                giftsTable.appendChild(row);
+            });
+        }
+        
+        function populateMarketItems(marketItems) {
+            const marketItemSelect = document.getElementById('marketItemSelect');
+            const marketTable = document.getElementById('marketTable').querySelector('tbody');
+            
+            marketItemSelect.innerHTML = '';
+            marketTable.innerHTML = '';
+            
+            marketItems.forEach(item => {
+                // Для select
+                const option = document.createElement('option');
+                option.value = item.id;
+                option.textContent = `${item.name} (${item.price}⭐)`;
+                marketItemSelect.appendChild(option);
+                
+                // Для таблицы
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.id}</td>
+                    <td>${item.name}</td>
+                    <td>${item.price}⭐</td>
+                    <td>${item.seller}</td>
+                `;
+                marketTable.appendChild(row);
+            });
+        }
+        
+        function showTab(tabName) {
+            // Скрыть все вкладки
+            document.getElementById('usersTab').style.display = 'none';
+            document.getElementById('marketTab').style.display = 'none';
+            document.getElementById('giftsTab').style.display = 'none';
+            document.getElementById('editTab').style.display = 'none';
+            
+            // Убрать активный класс со всех вкладок
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Показать выбранную вкладку
+            document.getElementById(`${tabName}Tab`).style.display = 'block';
+            
+            // Добавить активный класс текущей вкладке
+            event.target.classList.add('active');
+        }
+        
+        function giveStars() {
+            const userId = document.getElementById('userSelect').value;
+            const amount = document.getElementById('starsAmount').value;
+            
+            if (!userId) {
+                alert('Выберите пользователя');
+                return;
+            }
+            
+            fetch('/admin/give', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_id: userId,
+                    stars: parseInt(amount)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Звезды успешно выданы!');
+                    loadAdminData();
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            });
+        }
+        
+        function giveGift() {
+            const userId = document.getElementById('userSelectGift').value;
+            const productId = document.getElementById('productSelect').value;
+            
+            if (!userId) {
+                alert('Выберите пользователя');
+                return;
+            }
+            
+            if (!productId) {
+                alert('Выберите подарок');
+                return;
+            }
+            
+            fetch('/admin/give', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_id: userId,
+                    product_id: parseInt(productId)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Подарок успешно выдан!');
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            });
+        }
+        
+        function removeMarketItem() {
+            const itemId = document.getElementById('marketItemSelect').value;
+            
+            if (!itemId) {
+                alert('Выберите товар');
+                return;
+            }
+            
+            if (confirm('Вы уверены, что хотите удалить этот товар?')) {
+                fetch('/admin/remove_market_item', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        item_id: parseInt(itemId)
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Товар успешно удален!');
+                        loadAdminData();
+                    } else {
+                        alert('Ошибка: ' + data.error);
+                    }
+                });
+            }
+        }
+        
+        function updatePriceLimits() {
+            const minPrice = document.getElementById('minPrice').value;
+            const maxPrice = document.getElementById('maxPrice').value;
+            
+            if (!minPrice || !maxPrice) {
+                alert('Заполните оба поля');
+                return;
+            }
+            
+            fetch('/admin/update_price_limits', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    min_price: parseInt(minPrice),
+                    max_price: parseInt(maxPrice)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Лимиты цен успешно обновлены!');
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            });
+        }
+        
+        function addNewGift() {
+            const name = document.getElementById('giftName').value;
+            const price = document.getElementById('giftPrice').value;
+            const limit = document.getElementById('giftLimit').value;
+            const imageFile = document.getElementById('giftImage').files[0];
+            const improveFolder = document.getElementById('improveFolder').value;
+            
+            if (!name || !price || !imageFile) {
+                alert('Заполните обязательные поля: название, цена, изображение');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('name', name);
+            formData.append('price', price);
+            formData.append('image', imageFile);
+            
+            if (limit) {
+                formData.append('limit', limit);
+            }
+            
+            if (improveFolder) {
+                formData.append('improve_folder', improveFolder);
+            }
+            
+            fetch('/admin/add_product', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Подарок успешно добавлен!');
+                    loadAdminData();
+                    // Сбросить форму
+                    document.getElementById('giftName').value = '';
+                    document.getElementById('giftPrice').value = '50';
+                    document.getElementById('giftLimit').value = '';
+                    document.getElementById('improveFolder').value = '';
+                    document.getElementById('giftImage').value = '';
+                    document.getElementById('imagePreview').innerHTML = '';
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            });
+        }
+        
+        function uploadImprovements() {
+            const giftId = document.getElementById('giftSelect').value;
+            const filesInput = document.getElementById('improveImages');
+            
+            if (!giftId) {
+                alert('Выберите подарок');
+                return;
+            }
+            
+            if (filesInput.files.length === 0) {
+                alert('Выберите файлы для загрузки');
+                return;
+            }
+            
+            const files = filesInput.files;
+            const formData = new FormData();
+            formData.append('product_id', giftId);
+            
+            for (let i = 0; i < files.length; i++) {
+                formData.append('images', files[i]);
+            }
+            
+            // Показать индикатор загрузки
+            const btn = document.querySelector('#giftsTab button.btn');
+            const status = document.getElementById('uploadStatus');
+            const originalText = btn.textContent;
+            
+            btn.textContent = 'Загрузка...';
+            btn.disabled = true;
+            status.innerHTML = '';
+            status.style.color = 'var(--text)';
+            
+            fetch('/admin/upload_improvements', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    status.innerHTML = `✅ Успешно загружено ${data.uploaded} файлов в папку "${data.folder}"`;
+                    status.style.color = 'var(--success)';
+                    
+                    // Сбросить поле выбора файлов
+                    filesInput.value = '';
+                    document.getElementById('fileList').innerHTML = '<div class="no-files">Файлы не выбраны</div>';
+                } else {
+                    status.innerHTML = `❌ Ошибка: ${data.error}`;
+                    status.style.color = 'var(--error)';
+                }
+            })
+            .catch(error => {
+                status.innerHTML = `❌ Ошибка сети: ${error.message}`;
+                status.style.color = 'var(--error)';
+            })
+            .finally(() => {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            });
+        }
+        
+        function deleteProduct(productId) {
+            if (confirm('Вы уверены, что хотите удалить этот подарок? Это действие нельзя отменить.')) {
+                fetch('/admin/delete_product', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        product_id: productId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Подарок успешно удален!');
+                        loadAdminData();
+                    } else {
+                        alert('Ошибка: ' + data.error);
+                    }
+                });
+            }
+        }
+        
+        function toggleUserBlock(userId, isBlocked) {
+            currentUserId = userId;
+            currentBlockAction = isBlocked;
+            
+            const modal = document.getElementById('blockModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalMessage = document.getElementById('modalMessage');
+            const confirmBtn = document.getElementById('confirmBlockBtn');
+            
+            if (isBlocked) {
+                modalTitle.textContent = 'Блокировка пользователя';
+                modalMessage.textContent = `Вы уверены, что хотите заблокировать пользователя с ID ${userId}?`;
+                confirmBtn.textContent = 'Заблокировать';
+                confirmBtn.className = 'btn btn-danger';
+            } else {
+                modalTitle.textContent = 'Разблокировка пользователя';
+                modalMessage.textContent = `Вы уверены, что хотите разблокировать пользователя с ID ${userId}?`;
+                confirmBtn.textContent = 'Разблокировать';
+                confirmBtn.className = 'btn btn-success';
+            }
+            
+            // Назначить обработчик события
+            confirmBtn.onclick = confirmToggleBlock;
+            
+            // Показать модальное окно
+            modal.style.display = 'block';
+        }
+        
+        function confirmToggleBlock() {
+            fetch('/admin/toggle_user_block', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_id: currentUserId,
+                    is_blocked: currentBlockAction
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(currentBlockAction ? 'Пользователь заблокирован!' : 'Пользователь разблокирован!');
+                    loadAdminData();
+                    closeModal('blockModal');
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            });
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+        
+        function loadProductInfo() {
+            const productId = document.getElementById('editProductSelect').value;
+            
+            if (!productId) {
+                document.getElementById('productEditForm').style.display = 'none';
+                return;
+            }
+            
+            currentProductId = productId;
+            
+            fetch(`/admin/get_product_info?product_id=${productId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const product = data.product;
+                        
+                        // Заполняем форму данными продукта
+                        document.getElementById('editProductName').value = product.name;
+                        document.getElementById('editProductPrice').value = product.price;
+                        document.getElementById('editProductLimit').value = product.limit === 'none' ? '' : product.limit;
+                        document.getElementById('editImproveFolder').value = product.improve_folder;
+                        
+                        // Заполняем список улучшений
+                        const improvementsList = document.getElementById('improvementsList');
+                        improvementsList.innerHTML = '';
+                        
+                        if (product.improvements && product.improvements.length > 0) {
+                            improvementsList.innerHTML = '<h4>Текущие улучшения:</h4>';
+                            
+                            product.improvements.forEach(improvement => {
+                                const improvementItem = document.createElement('div');
+                                improvementItem.className = 'file-item';
+                                improvementItem.innerHTML = `
+                                    <div>
+                                        <div class="file-icon">🖼️</div>
+                                        <div class="file-info">
+                                            <div class="file-name">${improvement}</div>
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-danger" onclick="deleteImprovement(${productId}, '${improvement}')">Удалить</button>
+                                `;
+                                improvementsList.appendChild(improvementItem);
+                            });
+                        } else {
+                            improvementsList.innerHTML = '<p>У этого подарка нет улучшений</p>';
+                        }
+                        
+                        // Показываем форму
+                        document.getElementById('productEditForm').style.display = 'block';
+                    } else {
+                        alert('Ошибка загрузки информации о продукте: ' + data.error);
+                    }
+                });
+        }
+        
+        function updateProduct() {
+            const name = document.getElementById('editProductName').value;
+            const price = document.getElementById('editProductPrice').value;
+            const limit = document.getElementById('editProductLimit').value;
+            const improveFolder = document.getElementById('editImproveFolder').value;
+            const imageFile = document.getElementById('editProductImage').files[0];
+            
+            if (!name || !price) {
+                alert('Заполните обязательные поля: название и цена');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('product_id', currentProductId);
+            formData.append('name', name);
+            formData.append('price', price);
+            
+            if (limit) {
+                formData.append('limit', limit);
+            } else {
+                formData.append('limit', 'none');
+            }
+            
+            if (improveFolder) {
+                formData.append('improve_folder', improveFolder);
+            }
+            
+            if (imageFile) {
+                formData.append('image', imageFile);
+            }
+            
+            fetch('/admin/update_product', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Подарок успешно обновлен!');
+                    loadAdminData();
+                    // Сбросить поле выбора файла
+                    document.getElementById('editProductImage').value = '';
+                    document.getElementById('editImagePreview').innerHTML = '';
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            });
+        }
+        
+        function deleteImprovement(productId, imageName) {
+            if (confirm(`Вы уверены, что хотите удалить улучшение "${imageName}"?`)) {
+                fetch('/admin/delete_improvement', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        product_id: productId,
+                        image_name: imageName
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Улучшение успешно удалено!');
+                        loadProductInfo(); // Перезагружаем информацию о продукте
+                    } else {
+                        alert('Ошибка: ' + data.error);
+                    }
+                });
+            }
+        }
+        
+        function addNewImprovements() {
+            const filesInput = document.getElementById('newImproveImages');
+            
+            if (filesInput.files.length === 0) {
+                alert('Выберите файлы для загрузки');
+                return;
+            }
+            
+            const files = filesInput.files;
+            const formData = new FormData();
+            formData.append('product_id', currentProductId);
+            
+            for (let i = 0; i < files.length; i++) {
+                formData.append('improvements', files[i]);
+            }
+            
+            fetch('/admin/update_improvements', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Успешно загружено ${data.uploaded} улучшений!`);
+                    // Сбросить поле выбора файлов
+                    filesInput.value = '';
+                    document.getElementById('newFileList').innerHTML = '<div class="no-files">Файлы не выбраны</div>';
+                    // Обновить список улучшений
+                    loadProductInfo();
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            });
+        }
+        
+        // Функция для форматирования размера файла
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html>

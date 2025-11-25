@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Аккаунт заблокирован</title>
+    <link rel="stylesheet" href="style (1).css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        .blocked-container {
+            max-width: 500px;
+            margin: 5rem auto;
+            padding: 2.5rem;
+            background: linear-gradient(145deg, rgba(18, 18, 18, 0.9), rgba(10, 10, 10, 0.9));
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7),
+                        0 0 0 1px rgba(126, 34, 206, 0.2),
+                        0 0 25px rgba(126, 34, 206, 0.3);
+            border: 1px solid rgba(126, 34, 206, 0.3);
+            animation: fadeIn 0.8s ease-out;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .blocked-container::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(126, 34, 206, 0.1) 0%, transparent 70%);
+            animation: gradientShift 8s ease infinite;
+            z-index: -1;
+        }
+        
+        .blocked-icon {
+            font-size: 5rem;
+            margin-bottom: 1.5rem;
+            color: var(--error-color);
+            animation: subtlePulse 2s infinite, float 3s ease-in-out infinite;
+            text-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+        }
+        
+        .blocked-title {
+            font-size: 2.2rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, #ef4444, #dc2626, #ef4444);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: gradientShift 3s ease infinite;
+            background-size: 200% 200%;
+            text-shadow: 0 2px 10px rgba(239, 68, 68, 0.3);
+        }
+        
+        .blocked-message {
+            font-size: 1.1rem;
+            margin-bottom: 2.5rem;
+            color: #d0d0d0;
+            line-height: 1.6;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+        }
+        
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+            margin-top: 2.5rem;
+        }
+        
+        .tg-button {
+            padding: 1.2rem 2.5rem;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.8rem;
+            font-size: 1.1rem;
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+        
+        .tg-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: inherit;
+            z-index: -1;
+            transition: opacity 0.3s ease;
+        }
+        
+        .tg-button::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.7s ease;
+            z-index: -1;
+        }
+        
+        .tg-button:hover::after {
+            left: 100%;
+        }
+        
+        .contact-admin-btn {
+            background: var(--accent-gradient);
+            color: white;
+            box-shadow: 0 5px 15px rgba(126, 34, 206, 0.4);
+        }
+        
+        .contact-admin-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(126, 34, 206, 0.5);
+        }
+        
+        .close-app-btn {
+            background: linear-gradient(145deg, #2a2a2a, #333);
+            color: white;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .close-app-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(145deg, #333, #2a2a2a);
+        }
+        
+        .button-icon {
+            font-size: 1.4rem;
+            filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
+            50% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.8); }
+        }
+        
+        @media (max-width: 768px) {
+            .blocked-container {
+                margin: 2rem auto;
+                padding: 2rem;
+                width: 90%;
+            }
+            
+            .blocked-icon {
+                font-size: 4rem;
+            }
+            
+            .blocked-title {
+                font-size: 1.8rem;
+            }
+            
+            .blocked-message {
+                font-size: 1rem;
+            }
+            
+            .tg-button {
+                width: 100%;
+                padding: 1rem 2rem;
+            }
+        }
+    </style>
+</head>
+<body class="dark-theme">
+    <div class="blocked-container">
+        <div class="blocked-icon">🚫</div>
+        <h1 class="blocked-title">Доступ ограничен</h1>
+        <p class="blocked-message">
+            Ваш аккаунт был временно заблокирован.<br>
+            Для восстановления доступа свяжитесь с администратором.
+        </p>
+        
+        <div class="action-buttons">
+            <button class="tg-button contact-admin-btn" onclick="contactAdmin()">
+                <span class="button-icon">👤</span>
+                Связаться с администратором
+            </button>
+            
+            <button class="tg-button close-app-btn" onclick="closeApp()">
+                <span class="button-icon">✖️</span>
+                Закрыть приложение
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация Telegram WebApp
+        let tg = window.Telegram.WebApp;
+        
+        // Функция для связи с администратором
+        function contactAdmin() {
+            // Открываем аккаунт администратора в Telegram
+            tg.openTelegramLink('https://t.me/Releyer');
+        }
+        
+        // Функция для закрытия приложения
+        function closeApp() {
+            // Закрываем мини-приложение
+            tg.close();
+        }
+        
+        // Расширяем приложение на весь экран
+        tg.expand();
+        
+        // Добавляем дополнительные эффекты при загрузке
+        document.addEventListener('DOMContentLoaded', function() {
+            const container = document.querySelector('.blocked-container');
+            setTimeout(() => {
+                container.style.transform = 'scale(1)';
+                container.style.opacity = '1';
+            }, 100);
+        });
+    </script>
+</body>
+</html>

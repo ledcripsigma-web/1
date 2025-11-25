@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Торговая площадка</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-bg: #0a0a0a;
+            --secondary-bg: #141414;
+            --card-bg: linear-gradient(145deg, #1a1a1a, #151515);
+            --accent-gradient: linear-gradient(45deg, #8a2be2, #5d00ff, #00b7ff);
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --accent: #8a2be2;
+            --success: #00e676;
+            --warning: #ffca28;
+            --error: #ff4d6d;
+            --glow: 0 0 15px rgba(138, 43, 226, 0.5);
+            --live-gradient: linear-gradient(45deg, #ff3366, #ff7733, #ff3366);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #000000 0%, #0a0a0a 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Анимации */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        @keyframes livePulse {
+            0% { box-shadow: 0 0 5px #ff3366; }
+            50% { box-shadow: 0 0 20px #ff3366; }
+            100% { box-shadow: 0 0 5px #ff3366; }
+        }
+
+        @keyframes countdown {
+            from { width: 100%; }
+            to { width: 0%; }
+        }
+
+        /* Контейнер */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
+        /* Хедер */
+        header {
+            background: linear-gradient(to right, #000000, #0f0f0f);
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            border-bottom: 1px solid #1f1f1f;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .user-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            min-width: 180px;
+        }
+
+        .user-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 200px;
+        }
+
+        .user-balance {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: gradientShift 4s ease infinite;
+            background-size: 200% 200%;
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            background-color: rgba(138, 43, 226, 0.1);
+            white-space: nowrap;
+        }
+
+        .user-logout {
+            color: var(--error);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            white-space: nowrap;
+        }
+
+        .user-logout:hover {
+            color: #ff7a8a;
+            transform: translateX(3px);
+        }
+
+        /* Навигация */
+        .nav {
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            padding: 0.7rem 1.2rem;
+            background: linear-gradient(145deg, #1a1a1a, #151515);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid #2a2a2a;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--glow);
+            border-color: var(--accent);
+        }
+
+        .nav-btn.active {
+            background: var(--accent-gradient);
+            color: white;
+            box-shadow: var(--glow);
+        }
+
+        /* Заголовок секции */
+        .section-title {
+            padding: 2rem 0 1rem;
+            font-size: 1.8rem;
+            text-align: center;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: gradientShift 5s ease infinite;
+            background-size: 200% 200%;
+            position: relative;
+        }
+
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 3px;
+            background: var(--accent-gradient);
+            border-radius: 3px;
+        }
+
+        /* Вкладки */
+        .tabs-container {
+            display: flex;
+            justify-content: center;
+            margin: 1.5rem 0;
+            padding: 0 1rem;
+        }
+
+        .tabs {
+            display: flex;
+            background: linear-gradient(145deg, #1a1a1a, #151515);
+            border-radius: 12px;
+            padding: 0.3rem;
+            border: 1px solid #2a2a2a;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .tab {
+            padding: 0.8rem 1.5rem;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab.active {
+            background: var(--accent-gradient);
+            color: white;
+            box-shadow: 0 3px 10px rgba(138, 43, 226, 0.3);
+        }
+
+        .tab:hover:not(.active) {
+            background: rgba(138, 43, 226, 0.1);
+        }
+
+        /* Контейнер товаров */
+        .market-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.8rem;
+            padding: 2rem 0;
+            animation: fadeIn 0.7s ease-out;
+        }
+
+        /* Карточка товара */
+        .market-item {
+            background: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.3s ease;
+            border: 1px solid #2a2a2a;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .market-item:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 30px rgba(138, 43, 226, 0.3);
+        }
+
+        .live-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: var(--live-gradient);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            animation: livePulse 2s infinite;
+        }
+
+        .item-header {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .seller-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 0.8rem;
+            font-weight: bold;
+        }
+
+        .seller-info {
+            flex: 1;
+        }
+
+        .seller-name {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .item-main {
+            display: flex;
+            padding: 1.2rem;
+        }
+
+        .item-image-container {
+            width: 120px;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(45deg, #1a1a1a, #222);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-right: 1.2rem;
+        }
+
+        .item-image {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+        }
+
+        .item-details {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .item-name {
+            font-weight: 600;
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .item-collection {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            background: var(--accent-gradient);
+            color: white;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .item-improved {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            color: var(--success);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        /* LIVE аукционная информация */
+        .live-auction-info {
+            padding: 0.8rem;
+            background: rgba(255, 51, 102, 0.1);
+            border-radius: 8px;
+            margin-top: 0.5rem;
+            border: 1px solid rgba(255, 51, 102, 0.3);
+            position: relative;
+        }
+
+        .live-timer {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #ff3366;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+
+        .live-progress-bar {
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 0.3rem;
+        }
+
+        .live-progress {
+            height: 100%;
+            background: var(--live-gradient);
+            animation: countdown linear;
+        }
+
+        .current-bid {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--warning);
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .bidder-info {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 0.3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .bidder-avatar {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+
+        .bid-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.8rem;
+        }
+
+        .quick-bid-btn {
+            flex: 1;
+            padding: 0.6rem;
+            background: var(--live-gradient);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3rem;
+        }
+
+        .quick-bid-btn:hover {
+            background: linear-gradient(45deg, #ff4477, #ff8844);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 51, 102, 0.3);
+        }
+
+        .bid-details-btn {
+            padding: 0.6rem;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            border: 1px solid #333;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .bid-details-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: #ff3366;
+        }
+
+        .item-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.2rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-top: 1px solid #2a2a2a;
+        }
+
+        .item-price {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--warning);
+            font-size: 1.3rem;
+            font-weight: bold;
+        }
+
+        .action-btn {
+            padding: 0.7rem 1.2rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .buy-btn {
+            background: var(--success);
+            color: white;
+        }
+
+        .buy-btn:hover {
+            background: #00c853;
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 230, 118, 0.3);
+        }
+
+        .remove-btn {
+            background: var(--error);
+            color: white;
+        }
+
+        .remove-btn:hover {
+            background: #ff2e4d;
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(255, 77, 109, 0.3);
+        }
+
+        .bid-btn {
+            background: var(--live-gradient);
+            color: white;
+        }
+
+        .bid-btn:hover {
+            background: linear-gradient(45deg, #ff4477, #ff8844);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(255, 51, 102, 0.3);
+        }
+
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-secondary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            color: #555;
+        }
+
+        .empty-state p {
+            font-size: 1.1rem;
+        }
+
+        /* Модальное окно для LIVE ставок */
+        .live-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .live-modal-content {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid #ff3366;
+            box-shadow: 0 10px 30px rgba(255, 51, 102, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .live-modal-content::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--live-gradient);
+        }
+
+        .live-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .live-modal-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: var(--live-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .live-modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .live-modal-close:hover {
+            color: #ff3366;
+            transform: rotate(90deg);
+        }
+
+        .live-modal-body {
+            margin-bottom: 1.5rem;
+        }
+
+        .live-modal-timer {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #ff3366;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .live-modal-bid {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            font-size: 1.3rem;
+        }
+
+        .live-modal-bid-input {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 10px;
+            border: 2px solid #ff3366;
+            background: #1a1a1a;
+            color: white;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .live-modal-bid-input:focus {
+            outline: none;
+            border-color: #ff77aa;
+            box-shadow: 0 0 10px rgba(255, 119, 170, 0.5);
+        }
+
+        .live-modal-quick-bids {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .quick-bid-option {
+            padding: 0.8rem;
+            background: rgba(255, 51, 102, 0.1);
+            border: 1px solid rgba(255, 51, 102, 0.3);
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .quick-bid-option:hover {
+            background: rgba(255, 51, 102, 0.3);
+            transform: translateY(-3px);
+        }
+
+        .live-modal-bid-btn {
+            width: 100%;
+            padding: 1.2rem;
+            background: var(--live-gradient);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .live-modal-bid-btn:hover {
+            background: linear-gradient(45deg, #ff4477, #ff8844);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(255, 51, 102, 0.3);
+        }
+
+        /* Уведомления */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            animation: slideIn 0.5s ease-out;
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .notification.success {
+            background: var(--success);
+        }
+
+        .notification.error {
+            background: var(--error);
+        }
+
+        .notification.live {
+            background: var(--live-gradient);
+        }
+
+        /* Адаптивность */
+        @media (max-width: 1200px) {
+            .market-container {
+                grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            }
+        }
+
+        @media (max-width: 992px) {
+            .market-container {
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                gap: 1.5rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+            }
+            
+            .user-info {
+                align-items: center;
+                order: 2;
+                width: 100%;
+                flex-direction: row;
+                justify-content: space-between;
+                background: rgba(20, 20, 20, 0.8);
+                padding: 0.8rem;
+                border-radius: 8px;
+            }
+            
+            .user-balance {
+                font-size: 1rem;
+                padding: 0.4rem 0.8rem;
+            }
+            
+            .nav {
+                order: 1;
+                justify-content: center;
+                margin-bottom: 0.5rem;
+            }
+            
+            .market-container {
+                grid-template-columns: 1fr;
+                max-width: 500px;
+                margin: 0 auto;
+            }
+            
+            .item-main {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+            
+            .item-image-container {
+                width: 150px;
+                height: 150px;
+                margin-right: 0;
+                margin-bottom: 1rem;
+            }
+            
+            .tabs {
+                flex-direction: column;
+            }
+
+            .bid-actions {
+                flex-direction: column;
+            }
+
+            .live-modal-quick-bids {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 576px) {
+            .nav-btn {
+                flex: 1;
+                justify-content: center;
+                min-width: 110px;
+                padding: 0.6rem 1rem;
+            }
+            
+            .section-title {
+                font-size: 1.6rem;
+            }
+            
+            .item-footer {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: stretch;
+            }
+            
+            .user-info {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .live-modal-quick-bids {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Анимации для карточек */
+        .market-item {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .market-item:nth-child(1) { animation-delay: 0.1s; }
+        .market-item:nth-child(2) { animation-delay: 0.2s; }
+        .market-item:nth-child(3) { animation-delay: 0.3s; }
+        .market-item:nth-child(4) { animation-delay: 0.4s; }
+        .market-item:nth-child(5) { animation-delay: 0.5s; }
+        .market-item:nth-child(6) { animation-delay: 0.6s; }
+
+        /* Специальные эффекты */
+        .glow-effect {
+            position: relative;
+        }
+
+        .glow-effect::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border-radius: inherit;
+            box-shadow: 0 0 20px rgba(138, 43, 226, 0.4);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: -1;
+        }
+
+        .glow-effect:hover::after {
+            opacity: 1;
+        }
+        
+        /* Фиксированная панель баланса для мобильных устройств */
+        .balance-mobile {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent-gradient);
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border-radius: 30px;
+            font-weight: bold;
+            z-index: 90;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+        }
+        
+        @media (max-width: 768px) {
+            .balance-mobile {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="nav">
+                <div class="nav-btn" onclick="location.href='/home'">
+                    <i class="fas fa-user"></i>
+                    <span>Профиль</span>
+                </div>
+                <div class="nav-btn" onclick="location.href='/shop'">
+                    <i class="fas fa-gift"></i>
+                    <span>Магазин</span>
+                </div>
+                <div class="nav-btn active">
+                    <i class="fas fa-exchange-alt"></i>
+                    <span>Торговая</span>
+                </div>
+            </div>
+            <div class="user-info">
+                <div class="user-name">{{ username }}</div>
+                <div class="user-balance">
+                    <i class="fas fa-star"></i>
+                    <span>{{ balance }}</span>
+                </div>
+                <div class="user-logout" onclick="location.href='/logout'">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Выйти</span>
+                </div>
+            </div>
+        </header>
+        
+        <div class="section-title">Торговая площадка</div>
+        
+        <div class="tabs-container">
+            <div class="tabs">
+                <div class="tab active" onclick="showAllItems()">
+                    <i class="fas fa-globe"></i>
+                    <span>Все товары</span>
+                </div>
+                <div class="tab" onclick="showOwnItems()">
+                    <i class="fas fa-user"></i>
+                    <span>Мои товары</span>
+                </div>
+                <div class="tab" onclick="showLiveAuctions()">
+                    <i class="fas fa-bolt"></i>
+                    <span>LIVE Аукционы</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="market-container" id="marketContainer">
+            {% for item in items %}
+            <div class="market-item glow-effect" data-own="{{ item.is_own }}" data-type="market">
+                <div class="item-header">
+                    <div class="seller-avatar">{{ item.seller[0]|upper }}</div>
+                    <div class="seller-info">
+                        <div class="seller-name">Продавец: {{ item.seller }}</div>
+                    </div>
+                </div>
+                
+                <div class="item-main">
+                    <div class="item-image-container">
+                        <img src="{{ url_for('static', filename=item.image) }}" 
+                             class="item-image"
+                             onerror="this.onerror=null; this.src='{{ url_for('static', filename='images/placeholder.png') }}';"
+                             alt="{{ item.name }}">
+                    </div>
+                    
+                    <div class="item-details">
+                        <div class="item-name">{{ item.name }}</div>
+                        {% if item.collection_number %}
+                        <div class="item-collection">#{{ item.collection_number }}</div>
+                        {% endif %}
+                        {% if item.improved %}
+                        <div class="item-improved">
+                            <i class="fas fa-bolt"></i>
+                            <span>Улучшенный предмет</span>
+                        </div>
+                        {% else %}
+                        <div class="item-details-text">Обычный предмет</div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="item-footer">
+                    <div class="item-price">
+                        <i class="fas fa-star"></i>
+                        <span>{{ item.price }}</span>
+                    </div>
+                    
+                    {% if item.is_own %}
+                    <button class="action-btn remove-btn" onclick="removeItem({{ item.id }})">
+                        <i class="fas fa-times"></i>
+                        <span>Снять</span>
+                    </button>
+                    {% else %}
+                    <button class="action-btn buy-btn" onclick="buyItem({{ item.id }})">
+                        <i class="fas fa-shopping-cart"></i>
+                        <span>Купить</span>
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="fas fa-box-open"></i>
+                <p>На торговой площадке пока нет товаров</p>
+                <small>Будьте первым, кто выставит свой товар на продажу!</small>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="balance-mobile">
+        <i class="fas fa-star"></i>
+        <span id="mobile-balance">{{ balance }}</span>
+    </div>
+
+    <!-- Модальное окно для LIVE ставок -->
+    <div class="live-modal" id="liveBidModal">
+        <div class="live-modal-content">
+            <div class="live-modal-header">
+                <h2 class="live-modal-title">LIVE Ставка</h2>
+                <button class="live-modal-close" onclick="closeLiveBidModal()">&times;</button>
+            </div>
+            <div class="live-modal-body">
+                <div class="live-modal-timer">
+                    <i class="fas fa-clock"></i>
+                    <span id="liveTimer">00:00:00</span>
+                </div>
+                
+                <div class="live-modal-bid">
+                    <i class="fas fa-star"></i>
+                    <span id="liveCurrentBid">0</span>
+                </div>
+                
+                <input type="number" class="live-modal-bid-input" id="liveBidAmount" placeholder="Введите сумму ставки" min="0">
+                
+                <div class="live-modal-quick-bids">
+                    <div class="quick-bid-option" onclick="setQuickBid(50)">+50</div>
+                    <div class="quick-bid-option" onclick="setQuickBid(100)">+100</div>
+                    <div class="quick-bid-option" onclick="setQuickBid(500)">+500</div>
+                </div>
+                
+                <button class="live-modal-bid-btn" onclick="placeLiveBid()">
+                    <i class="fas fa-gavel"></i>
+                    Сделать LIVE ставку
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentLiveAuction = null;
+        let liveAuctionInterval = null;
+
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            
+            const icon = document.createElement('i');
+            icon.className = type === 'success' ? 'fas fa-check-circle' : 
+                            type === 'live' ? 'fas fa-bolt' : 'fas fa-exclamation-circle';
+            
+            notification.appendChild(icon);
+            notification.appendChild(document.createTextNode(message));
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideIn 0.5s ease-out reverse';
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 500);
+            }, 3000);
+        }
+
+        function showAllItems() {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab')[0].classList.add('active');
+            
+            document.querySelectorAll('.market-item').forEach(item => {
+                item.style.display = 'flex';
+            });
+        }
+        
+        function showOwnItems() {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab')[1].classList.add('active');
+            
+            document.querySelectorAll('.market-item').forEach(item => {
+                if (item.dataset.own === 'True') {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        function showLiveAuctions() {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab')[2].classList.add('active');
+            
+            // Загружаем LIVE аукционы с сервера
+            fetch('/get_live_auctions')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayLiveAuctions(data.auctions);
+                    } else {
+                        showNotification('Ошибка загрузки аукционов', 'error');
+                    }
+                })
+                .catch(error => {
+                    showNotification('Ошибка сети: ' + error, 'error');
+                });
+        }
+
+        function displayLiveAuctions(auctions) {
+            const container = document.getElementById('marketContainer');
+            container.innerHTML = '';
+
+            if (auctions.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-bolt"></i>
+                        <p>Активных LIVE аукционов нет</p>
+                        <small>Создайте свой первый LIVE аукцион!</small>
+                    </div>
+                `;
+                return;
+            }
+
+            auctions.forEach(auction => {
+                const timeLeft = calculateTimeLeft(auction.end_time);
+                const progressPercentage = calculateProgressPercentage(auction.end_time);
+                
+                const auctionElement = document.createElement('div');
+                auctionElement.className = 'market-item glow-effect';
+                auctionElement.dataset.type = 'auction';
+                auctionElement.dataset.id = auction.id;
+                
+                auctionElement.innerHTML = `
+                    <div class="live-badge">
+                        <i class="fas fa-bolt"></i>
+                        <span>LIVE</span>
+                    </div>
+                    <div class="item-header">
+                        <div class="seller-avatar">${auction.seller_username[0].toUpperCase()}</div>
+                        <div class="seller-info">
+                            <div class="seller-name">Продавец: ${auction.seller_username}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="item-main">
+                        <div class="item-image-container">
+                            <img src="/static/${auction.image}" 
+                                class="item-image"
+                                onerror="this.onerror=null; this.src='/static/images/placeholder.png';"
+                                alt="${auction.name}">
+                        </div>
+                        
+                        <div class="item-details">
+                            <div class="item-name">${auction.name}</div>
+                            ${auction.collection_number ? `<div class="item-collection">#${auction.collection_number}</div>` : ''}
+                            ${auction.improved ? `
+                            <div class="item-improved">
+                                <i class="fas fa-bolt"></i>
+                                <span>Улучшенный предмет</span>
+                            </div>` : '<div class="item-details-text">Обычный предмет</div>'}
+                            
+                            <div class="live-auction-info">
+                                <div class="live-timer">
+                                    <i class="fas fa-clock"></i>
+                                    <span>${timeLeft}</span>
+                                </div>
+                                <div class="live-progress-bar">
+                                    <div class="live-progress" style="width: ${progressPercentage}%"></div>
+                                </div>
+                                
+                                <div class="current-bid">
+                                    <i class="fas fa-star"></i>
+                                    <span>${auction.current_price}</span>
+                                </div>
+                                
+                                ${auction.current_bidder ? `
+                                <div class="bidder-info">
+                                    <div class="bidder-avatar">${auction.current_bidder_username[0].toUpperCase()}</div>
+                                    <span>${auction.current_bidder_username}</span>
+                                </div>` : '<div class="bidder-info">Ставок пока нет</div>'}
+                                
+                                <div class="bid-actions">
+                                    <button class="quick-bid-btn" onclick="openLiveBidModal(${auction.id}, ${auction.current_price}, ${auction.current_price + auction.step_price})">
+                                        <i class="fas fa-gavel"></i>
+                                        <span>Сделать ставку</span>
+                                    </button>
+                                    <button class="bid-details-btn" onclick="showAuctionDetails(${auction.id})">
+                                        <i class="fas fa-info-circle"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(auctionElement);
+            });
+
+            // Запускаем обновление таймеров
+            startLiveTimers();
+        }
+
+        function calculateTimeLeft(endTime) {
+            const end = new Date(endTime);
+            const now = new Date();
+            const diff = end - now;
+            
+            if (diff <= 0) return 'Аукцион завершен';
+            
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+            
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function calculateProgressPercentage(endTime) {
+            const end = new Date(endTime);
+            const now = new Date();
+            const start = new Date(end.getTime() - 24 * 60 * 60 * 1000); // Предполагаем, что аукцион длится 24 часа
+            
+            const total = end - start;
+            const passed = now - start;
+            
+            if (passed <= 0) return 0;
+            if (passed >= total) return 100;
+            
+            return (passed / total) * 100;
+        }
+
+        function startLiveTimers() {
+            // Останавливаем предыдущие таймеры, если они есть
+            if (liveAuctionInterval) clearInterval(liveAuctionInterval);
+            
+            // Запускаем обновление таймеров каждую секунду
+            liveAuctionInterval = setInterval(() => {
+                document.querySelectorAll('.live-timer span').forEach(timer => {
+                    const auctionItem = timer.closest('.market-item');
+                    if (auctionItem) {
+                        const auctionId = auctionItem.dataset.id;
+                        // В реальном приложении здесь бы мы получали актуальное время с сервера
+                        const endTime = new Date(Date.now() + Math.random() * 24 * 60 * 60 * 1000); // Заглушка
+                        timer.textContent = calculateTimeLeft(endTime);
+                    }
+                });
+            }, 1000);
+        }
+
+        function openLiveBidModal(auctionId, currentPrice, minBid) {
+            currentLiveAuction = {
+                id: auctionId,
+                currentPrice: currentPrice,
+                minBid: minBid
+            };
+            
+            document.getElementById('liveCurrentBid').textContent = currentPrice;
+            document.getElementById('liveBidAmount').value = minBid;
+            document.getElementById('liveBidAmount').min = minBid;
+            
+            // Запускаем таймер в модальном окне
+            const endTime = new Date(Date.now() + 5 * 60 * 1000); // 5 минут для примера
+            updateLiveTimer(endTime);
+            
+            document.getElementById('liveBidModal').style.display = 'flex';
+        }
+
+        function closeLiveBidModal() {
+            document.getElementById('liveBidModal').style.display = 'none';
+            currentLiveAuction = null;
+        }
+
+        function updateLiveTimer(endTime) {
+            const timerElement = document.getElementById('liveTimer');
+            
+            const interval = setInterval(() => {
+                const now = new Date();
+                const diff = endTime - now;
+                
+                if (diff <= 0) {
+                    clearInterval(interval);
+                    timerElement.textContent = '00:00:00';
+                    showNotification('Аукцион завершен!', 'live');
+                    closeLiveBidModal();
+                    return;
+                }
+                
+                const hours = Math.floor(diff / (1000 * 60 * 60));
+                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                
+                timerElement.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        function setQuickBid(amount) {
+            const bidInput = document.getElementById('liveBidAmount');
+            const currentValue = parseInt(bidInput.value) || 0;
+            bidInput.value = currentValue + amount;
+        }
+
+        function placeLiveBid() {
+            const bidAmount = parseInt(document.getElementById('liveBidAmount').value);
+            
+            if (isNaN(bidAmount) || bidAmount < currentLiveAuction.minBid) {
+                showNotification(`Ставка должна быть не менее ${currentLiveAuction.minBid}`, 'error');
+                return;
+            }
+            
+            fetch('/place_live_bid', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    auction_id: currentLiveAuction.id,
+                    bid_amount: bidAmount
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('LIVE ставка успешно размещена!', 'live');
+                    closeLiveBidModal();
+                    
+                    // Обновляем список аукционов
+                    showLiveAuctions();
+                } else {
+                    showNotification('Ошибка: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Ошибка сети: ' + error, 'error');
+            });
+        }
+
+        function showAuctionDetails(auctionId) {
+            showNotification('Детали аукциона загружаются...', 'live');
+            // В реальном приложении здесь бы открывалось модальное окно с детальной информацией
+        }
+        
+        function buyItem(itemId) {
+            if (confirm('Вы уверены, что хотите купить этот товар?')) {
+                fetch('/buy_from_market', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ item_id: itemId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification('Покупка успешно завершена!', 'success');
+                        
+                        // Обновляем баланс в шапке
+                        const balanceElement = document.querySelector('.user-balance span');
+                        if (balanceElement) {
+                            balanceElement.textContent = data.new_balance;
+                        }
+                        
+                        // Обновляем баланс в мобильной версии
+                        const mobileBalance = document.getElementById('mobile-balance');
+                        if (mobileBalance) {
+                            mobileBalance.textContent = data.new_balance;
+                        }
+                        
+                        // Перезагружаем страницу через короткую паузу
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1500);
+                    } else {
+                        showNotification('Ошибка: ' + data.error, 'error');
+                    }
+                })
+                .catch(error => {
+                    showNotification('Ошибка сети: ' + error, 'error');
+                });
+            }
+        }
+        
+        function removeItem(itemId) {
+            if (confirm('Снять товар с продажи?')) {
+                fetch('/remove_from_market', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ item_id: itemId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification('Товар снят с продажи!', 'success');
+                        
+                        // Перезагружаем страницу через короткую паузу
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1500);
+                    } else {
+                        showNotification('Ошибка: ' + data.error, 'error');
+                    }
+                })
+                .catch(error => {
+                    showNotification('Ошибка сети: ' + error, 'error');
+                });
+            }
+        }
+
+        // Добавляем анимацию при загрузке страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            document.body.style.opacity = 1;
+        });
+
+        // Закрытие модального окна при клике вне его
+        window.addEventListener('click', (event) => {
+            const modal = document.getElementById('liveBidModal');
+            if (event.target === modal) {
+                closeLiveBidModal();
+            }
+        });
+    </script>
+</body>
+</html>

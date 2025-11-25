@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Главная - Мой профиль</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-bg: #0a0a0a;
+            --secondary-bg: #141414;
+            --card-bg: linear-gradient(145deg, #1a1a1a, #151515);
+            --accent-gradient: linear-gradient(45deg, #8a2be2, #5d00ff, #00b7ff);
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --accent: #8a2be2;
+            --success: #00e676;
+            --warning: #ffca28;
+            --error: #ff4d6d;
+            --glow: 0 0 15px rgba(138, 43, 226, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #000000 0%, #0a0a0a 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+            overflow-x: hidden;
+            touch-action: manipulation;
+        }
+
+        html, body {
+            touch-action: manipulation;
+            -webkit-text-size-adjust: none;
+            text-size-adjust: none;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
+        header {
+            background: linear-gradient(to right, #000000, #0f0f0f);
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            border-bottom: 1px solid #1f1f1f;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            animation: slideIn 0.5s ease-out;
+            transition: transform 0.3s ease-in-out;
+        }
+
+        header.hidden {
+            transform: translateY(-100%);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            min-width: auto;
+        }
+
+        .user-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 150px;
+        }
+
+        .user-balance {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1rem;
+            font-weight: bold;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: gradientShift 4s ease infinite;
+            background-size: 200% 200%;
+            padding: 0.4rem 0.8rem;
+            border-radius: 25px;
+            background-color: rgba(138, 43, 226, 0.1);
+            white-space: nowrap;
+        }
+
+        .user-stats {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .user-logout {
+            color: var(--error);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            white-space: nowrap;
+            padding: 0.4rem 0.6rem;
+            border-radius: 5px;
+            background: rgba(255, 77, 109, 0.1);
+        }
+
+        .user-logout:hover {
+            color: #ff7a8a;
+            background: rgba(255, 77, 109, 0.2);
+            transform: translateX(3px);
+        }
+
+        .nav {
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            padding: 0.7rem 1.2rem;
+            background: linear-gradient(145deg, #1a1a1a, #151515);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid #2a2a2a;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--glow);
+            border-color: var(--accent);
+        }
+
+        .nav-btn.active {
+            background: var(--accent-gradient);
+            color: white;
+            box-shadow: var(--glow);
+        }
+
+        .section-title {
+            padding: 2rem 0 1rem;
+            font-size: 1.8rem;
+            text-align: center;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: gradientShift 5s ease infinite;
+            background-size: 200% 200%;
+            position: relative;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 3px;
+            background: var(--accent-gradient);
+            border-radius: 3px;
+        }
+
+        .gifts-counter {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .filter-container {
+            padding: 1.5rem;
+            background: var(--card-bg);
+            border-radius: 12px;
+            margin: 1rem 0;
+            border: 1px solid #2a2a2a;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-label {
+            font-size: 1rem;
+            min-width: 120px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .filter-select {
+            flex: 1;
+            padding: 0.8rem 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            color: var(--text-primary);
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            min-height: 120px;
+            max-width: 400px;
+        }
+
+        .filter-btn {
+            padding: 0.8rem 1.5rem;
+            background: var(--accent-gradient);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .filter-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(138, 43, 226, 0.3);
+        }
+
+        .gifts-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.8rem;
+            padding: 2rem 0;
+            animation: fadeIn 0.7s ease-out;
+        }
+
+        .gift-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.3s ease;
+            border: 1px solid #2a2a2a;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .gift-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 30px rgba(138, 43, 226, 0.3);
+        }
+
+        .gift-image-container {
+            position: relative;
+            overflow: hidden;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(45deg, #1a1a1a, #222);
+        }
+
+        .gift-image {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+            transition: all 0.5s ease;
+        }
+
+        .gift-card:hover .gift-image {
+            transform: scale(1.1);
+        }
+
+        .gift-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: var(--accent-gradient);
+            color: white;
+            padding: 0.3rem 0.7rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .gift-info {
+            padding: 1.2rem;
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+        }
+
+        .gift-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            text-align: center;
+        }
+
+        .gift-stats {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            min-height: 24px;
+        }
+
+        .improved-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            color: var(--success);
+            font-weight: bold;
+        }
+
+        .gift-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.7rem;
+            padding: 0 1.2rem 1.2rem;
+        }
+
+        .action-btn {
+            padding: 0.8rem;
+            background: linear-gradient(145deg, #2a2a2a, #333);
+            color: var(--text-primary);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .action-btn:hover:not(:disabled) {
+            background: var(--accent-gradient);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(138, 43, 226, 0.3);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .improve-btn {
+            background: linear-gradient(145deg, #2a2a2a, #333);
+            position: relative;
+        }
+
+        .improve-btn::before {
+            content: '500⭐';
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--warning);
+            color: black;
+            font-size: 0.7rem;
+            font-weight: bold;
+            padding: 0.2rem 0.5rem;
+            border-radius: 10px;
+        }
+
+        .auction-btn {
+            background: linear-gradient(145deg, #2a2a2a, #333);
+            position: relative;
+        }
+
+        .auction-btn::before {
+            content: 'Аукцион';
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--accent);
+            color: white;
+            font-size: 0.7rem;
+            font-weight: bold;
+            padding: 0.2rem 0.5rem;
+            border-radius: 10px;
+        }
+
+        .user-auctions {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid #2a2a2a;
+        }
+
+        .auction-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .auction-item {
+            background: linear-gradient(145deg, #1a1a1a, #151515);
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid #2a2a2a;
+        }
+
+        .auction-progress {
+            height: 6px;
+            background: #2a2a2a;
+            border-radius: 3px;
+            margin: 0.5rem 0;
+            overflow: hidden;
+        }
+
+        .auction-progress-bar {
+            height: 100%;
+            background: var(--accent-gradient);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        .empty-message {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-secondary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            background: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid #2a2a2a;
+        }
+
+        .empty-message i {
+            font-size: 3rem;
+            color: #555;
+        }
+
+        .empty-message p {
+            font-size: 1.1rem;
+        }
+
+        .shop-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .shop-link:hover {
+            text-decoration: underline;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.85);
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+            animation: fadeIn 0.3s ease-out;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+            border: 1px solid #3a3a3a;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .modal-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 1.5rem;
+            text-align: center;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .modal-input {
+            width: 100%;
+            padding: 0.9rem;
+            margin-bottom: 1.5rem;
+            background: rgba(0, 0, 0, 0.3);
+            color: white;
+            border: 1px solid #3a3a3a;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        .modal-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 10px rgba(138, 43, 226, 0.3);
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .modal-btn {
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .cancel-btn {
+            background: linear-gradient(145deg, #2a2a2a, #333);
+            color: var(--text-primary);
+        }
+
+        .cancel-btn:hover {
+            background: #3a3a3a;
+        }
+
+        .confirm-btn {
+            background: var(--accent-gradient);
+            color: white;
+        }
+
+        .confirm-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(138, 43, 226, 0.3);
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            animation: slideIn 0.5s ease-out;
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .notification.success {
+            background: var(--success);
+        }
+
+        .notification.error {
+            background: var(--error);
+        }
+
+        @media (max-width: 1200px) {
+            .gifts-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 992px) {
+            .gifts-container {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1.5rem;
+            }
+            
+            .gift-image-container {
+                height: 180px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+            }
+            
+            .user-info {
+                align-items: center;
+                order: 2;
+                width: 100%;
+                flex-direction: row;
+                justify-content: space-between;
+                background: rgba(20, 20, 20, 0.8);
+                padding: 0.8rem;
+                border-radius: 8px;
+            }
+            
+            .user-balance {
+                font-size: 1rem;
+                padding: 0.4rem 0.8rem;
+            }
+            
+            .nav {
+                order: 1;
+                justify-content: center;
+                margin-bottom: 0.5rem;
+            }
+            
+            .gifts-container {
+                grid-template-columns: repeat(2, 1fr);
+                max-width: 100%;
+                margin: 0 auto;
+                gap: 1rem;
+            }
+            
+            .section-title {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .filter-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .filter-select {
+                max-width: 100%;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .nav-btn {
+                flex: 1;
+                justify-content: center;
+                min-width: 110px;
+                padding: 0.6rem 1rem;
+            }
+            
+            .section-title {
+                font-size: 1.5rem;
+            }
+            
+            .gift-image-container {
+                height: 160px;
+            }
+            
+            .user-info {
+                flex-direction: row;
+                gap: 0.8rem;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .user-name {
+                max-width: 100px;
+            }
+            
+            .modal-actions {
+                flex-direction: column;
+            }
+            
+            .gifts-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .gift-card {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .gift-card:nth-child(1) { animation-delay: 0.1s; }
+        .gift-card:nth-child(2) { animation-delay: 0.2s; }
+        .gift-card:nth-child(3) { animation-delay: 0.3s; }
+        .gift-card:nth-child(4) { animation-delay: 0.4s; }
+        .gift-card:nth-child(5) { animation-delay: 0.5s; }
+        .gift-card:nth-child(6) { animation-delay: 0.6s; }
+
+        .glow-effect {
+            position: relative;
+        }
+
+        .glow-effect::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border-radius: inherit;
+            box-shadow: 0 0 20px rgba(138, 43, 226, 0.4);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: -1;
+        }
+
+        .glow-effect:hover::after {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header id="mainHeader">
+            <div class="nav">
+                <div class="nav-btn active">
+                    <i class="fas fa-user"></i>
+                    <span>Профиль</span>
+                </div>
+                <div class="nav-btn" onclick="location.href='/shop'">
+                    <i class="fas fa-gift"></i>
+                    <span>Магазин</span>
+                </div>
+                <div class="nav-btn" onclick="location.href='/trading'">
+                    <i class="fas fa-exchange-alt"></i>
+                    <span>Торговая</span>
+                </div>
+            </div>
+            <div class="user-info">
+                <div class="user-name">{{ username }}</div>
+                <div class="user-logout" onclick="location.href='/logout'">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Выйти</span>
+                </div>
+                <div class="user-stats">
+                    <div class="user-balance">
+                        <i class="fas fa-star"></i>
+                        <span>{{ balance }}</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-gift"></i>
+                        <span>{{ gifts|length }}</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <div class="section-title">
+            <span>Ваши подарки</span>
+            <div class="gifts-counter">
+                <i class="fas fa-gift"></i>
+                <span>Всего: {{ gifts|length }}</span>
+            </div>
+        </div>
+        
+        <div class="filter-container">
+            <div class="filter-row">
+                <div class="filter-label">
+                    <i class="fas fa-filter"></i>
+                    <span>Фильтр подарков:</span>
+                </div>
+                <select id="giftFilter" class="filter-select" multiple>
+                </select>
+                <button class="filter-btn" onclick="resetFilter()">
+                    <i class="fas fa-undo"></i>
+                    <span>Сбросить</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="gifts-container">
+            {% for gift in gifts %}
+            <div class="gift-card glow-effect" data-name="{{ gift.name }}" data-id="{{ gift.id }}">
+                <div class="gift-image-container">
+                    <img src="{{ url_for('static', filename=gift.image) }}" 
+                         class="gift-image"
+                         onerror="this.onerror=null; this.src='{{ url_for('static', filename='images/placeholder.png') }}';"
+                         alt="{{ gift.name }}">
+                    {% if gift.improved %}
+                    <div class="gift-badge">Улучшено</div>
+                    {% endif %}
+                </div>
+                
+                <div class="gift-info">
+                    <div class="gift-name">{{ gift.name }}</div>
+                    <div class="gift-stats">
+                        {% if gift.improved %}
+                        <div class="improved-badge">
+                            <i class="fas fa-bolt"></i>
+                            <span>Улучшено! #{{ gift.collection_number }}</span>
+                        </div>
+                        {% elif gift.can_improve %}
+                        <span>Можно улучшить</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="gift-actions">
+                    <button class="action-btn" onclick="putOnMarket({{ gift.id }})">
+                        <i class="fas fa-tag"></i>
+                        <span>На продажу</span>
+                    </button>
+                    <button class="action-btn auction-btn" onclick="openAuctionModal({{ gift.id }})">
+                        <i class="fas fa-gavel"></i>
+                        <span>Аукцион</span>
+                    </button>
+                    {% if gift.can_improve and not gift.improved %}
+                    <button class="action-btn improve-btn" onclick="improveGift({{ gift.id }})">
+                        <i class="fas fa-magic"></i>
+                        <span>Улучшить</span>
+                    </button>
+                    {% endif %}
+                    <button class="action-btn" onclick="openTransferModal({{ gift.id }})">
+                        <i class="fas fa-paper-plane"></i>
+                        <span>Передать</span>
+                    </button>
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-message">
+                <i class="fas fa-box-open"></i>
+                <p>У вас пока нет подарков</p>
+                <small>Посетите магазин, чтобы приобрести подарки</small>
+                <a href="/shop" class="shop-link">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span>Перейти в магазин</span>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="section-title">
+            <span>Ваши активные аукционы</span>
+        </div>
+        
+        <div class="user-auctions">
+            <div id="userAuctionsList" class="auction-list">
+                <div class="empty-message">
+                    <i class="fas fa-gavel"></i>
+                    <p>У вас нет активных аукционов</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="transferModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-title">Передать подарок</div>
+            <input type="number" id="recipientId" class="modal-input" placeholder="ID получателя в Telegram">
+            <div class="modal-actions">
+                <button class="modal-btn cancel-btn" onclick="closeModal('transferModal')">
+                    <i class="fas fa-times"></i>
+                    <span>Отмена</span>
+                </button>
+                <button class="modal-btn confirm-btn" onclick="transferGift()">
+                    <i class="fas fa-paper-plane"></i>
+                    <span>Передать</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="auctionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-title">Создать аукцион</div>
+            <input type="number" id="startPrice" class="modal-input" placeholder="Начальная цена" min="0">
+            <select id="auctionDuration" class="modal-input">
+                <option value="1">1 час</option>
+                <option value="6">6 часов</option>
+                <option value="12">12 часов</option>
+                <option value="24" selected>24 часа</option>
+                <option value="48">48 часов</option>
+                <option value="72">72 часа</option>
+            </select>
+            <div class="modal-actions">
+                <button class="modal-btn cancel-btn" onclick="closeModal('auctionModal')">
+                    <i class="fas fa-times"></i>
+                    <span>Отмена</span>
+                </button>
+                <button class="modal-btn confirm-btn" onclick="createAuction()">
+                    <i class="fas fa-gavel"></i>
+                    <span>Создать аукцион</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentGiftId = null;
+        const totalGifts = {{ gifts|length }};
+        let lastScrollTop = 0;
+        const header = document.getElementById('mainHeader');
+        const scrollThreshold = 100;
+        
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            
+            const icon = document.createElement('i');
+            icon.className = type === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-circle';
+            
+            notification.appendChild(icon);
+            notification.appendChild(document.createTextNode(message));
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideIn 0.5s ease-out reverse';
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 500);
+            }, 3000);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const giftNames = Array.from(document.querySelectorAll('.gift-name'))
+                .map(el => el.textContent.trim());
+            
+            const uniqueNames = [...new Set(giftNames)];
+            uniqueNames.sort();
+            
+            const filterSelect = document.getElementById('giftFilter');
+            uniqueNames.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                filterSelect.appendChild(option);
+            });
+            
+            filterSelect.addEventListener('change', filterGifts);
+            
+            window.addEventListener('scroll', handleScroll);
+            
+            loadUserAuctions();
+        });
+        
+        function handleScroll() {
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            
+            if (scrollTop > lastScrollTop && scrollTop > scrollThreshold) {
+                header.classList.add('hidden');
+            } else {
+                header.classList.remove('hidden');
+            }
+            
+            lastScrollTop = scrollTop;
+        }
+        
+        function filterGifts() {
+            const filterSelect = document.getElementById('giftFilter');
+            const selectedGifts = Array.from(filterSelect.selectedOptions).map(opt => opt.value);
+            const giftCards = document.querySelectorAll('.gift-card');
+            let visibleCount = 0;
+            
+            if (selectedGifts.length === 0) {
+                giftCards.forEach(card => {
+                    card.style.display = 'flex';
+                    visibleCount++;
+                });
+                document.querySelector('.gifts-counter span').textContent = `Всего: ${totalGifts}`;
+                return;
+            }
+            
+            giftCards.forEach(card => {
+                const giftName = card.dataset.name;
+                if (selectedGifts.includes(giftName)) {
+                    card.style.display = 'flex';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            
+            document.querySelector('.gifts-counter span').textContent = `Показано: ${visibleCount} из ${totalGifts}`;
+        }
+        
+        function resetFilter() {
+            const filterSelect = document.getElementById('giftFilter');
+            Array.from(filterSelect.options).forEach(option => {
+                option.selected = false;
+            });
+            document.querySelectorAll('.gift-card').forEach(card => {
+                card.style.display = 'flex';
+            });
+            document.querySelector('.gifts-counter span').textContent = `Всего: ${totalGifts}`;
+        }
+        
+        function putOnMarket(giftId) {
+            const price = prompt("Введите цену продажи:");
+            if (price && !isNaN(price) && parseInt(price) > 0) {
+                fetch('/put_on_market', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        gift_id: giftId,
+                        price: parseInt(price)
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification('Подарок выставлен на продажу!', 'success');
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1500);
+                    } else {
+                        showNotification('Ошибка: ' + data.error, 'error');
+                    }
+                })
+                .catch(error => {
+                    showNotification('Ошибка сети: ' + error, 'error');
+                });
+            }
+        }
+        
+        function improveGift(giftId) {
+            if (!confirm('Улучшить подарок за 500⭐? Это можно сделать только 1 раз.')) return;
+            
+            fetch('/improve_gift', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ gift_id: giftId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const giftCard = document.querySelector(`.gift-card[data-id="${giftId}"]`);
+                    if (giftCard) {
+                        giftCard.querySelector('.gift-image').src = data.new_image;
+                        
+                        const statsElement = giftCard.querySelector('.gift-stats');
+                        statsElement.innerHTML = '<div class="improved-badge"><i class="fas fa-bolt"></i><span>Улучшено!</span></div>';
+                        
+                        if (!giftCard.querySelector('.gift-badge')) {
+                            const badge = document.createElement('div');
+                            badge.className = 'gift-badge';
+                            badge.textContent = 'Улучшено';
+                            giftCard.querySelector('.gift-image-container').appendChild(badge);
+                        }
+                        
+                        const improveBtn = giftCard.querySelector('.improve-btn');
+                        if (improveBtn) {
+                            improveBtn.remove();
+                        }
+                    }
+                    
+                    const balanceElement = document.querySelector('.user-balance span');
+                    if (balanceElement) {
+                        balanceElement.textContent = data.new_balance;
+                    }
+                    
+                    showNotification('Подарок успешно улучшен!', 'success');
+                } else {
+                    showNotification('Ошибка: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Ошибка сети: ' + error, 'error');
+            });
+        }
+        
+        function openTransferModal(giftId) {
+            currentGiftId = giftId;
+            document.getElementById('recipientId').value = '';
+            document.getElementById('transferModal').style.display = 'flex';
+        }
+        
+        function openAuctionModal(giftId) {
+            currentGiftId = giftId;
+            document.getElementById('startPrice').value = '';
+            document.getElementById('auctionModal').style.display = 'flex';
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+        
+        function transferGift() {
+            const recipientId = document.getElementById('recipientId').value;
+            if (!recipientId) {
+                showNotification('Введите ID получателя', 'error');
+                return;
+            }
+            
+            fetch('/transfer_gift', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    gift_id: currentGiftId,
+                    recipient_id: parseInt(recipientId)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Запрос на передачу отправлен в Telegram!', 'success');
+                    window.open('https://t.me/IFragmentBot', '_blank');
+                    closeModal('transferModal');
+                } else {
+                    showNotification('Ошибка: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Ошибка сети: ' + error, 'error');
+            });
+        }
+
+        function createAuction() {
+            const startPrice = document.getElementById('startPrice').value;
+            const duration = document.getElementById('auctionDuration').value;
+            
+            if (!startPrice || isNaN(startPrice) || parseInt(startPrice) <= 0) {
+                showNotification('Введите корректную начальную цену', 'error');
+                return;
+            }
+            
+            fetch('/create_auction', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    gift_id: currentGiftId,
+                    start_price: parseInt(startPrice),
+                    end_time_hours: parseInt(duration)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Аукцион создан!', 'success');
+                    closeModal('auctionModal');
+                    loadUserAuctions();
+                } else {
+                    showNotification('Ошибка: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Ошибка сети: ' + error, 'error');
+            });
+        }
+
+        function loadUserAuctions() {
+            fetch('/get_live_auctions')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const auctionsContainer = document.getElementById('userAuctionsList');
+                    auctionsContainer.innerHTML = '';
+                    
+                    if (data.auctions && data.auctions.length > 0) {
+                        const userAuctions = data.auctions.filter(auction => auction.is_own);
+                        
+                        if (userAuctions.length === 0) {
+                            auctionsContainer.innerHTML = `
+                                <div class="empty-message">
+                                    <i class="fas fa-gavel"></i>
+                                    <p>У вас нет активных аукционов</p>
+                                </div>
+                            `;
+                            return;
+                        }
+                        
+                        userAuctions.forEach(auction => {
+                            const auctionElement = document.createElement('div');
+                            auctionElement.className = 'auction-item';
+                            auctionElement.innerHTML = `
+                                <h3>${auction.name}</h3>
+                                <p>Текущая цена: <b>${auction.current_price}⭐</b></p>
+                                <p>До окончания: ${auction.time_left}</p>
+                                <div class="auction-progress">
+                                    <div class="auction-progress-bar" style="width: ${auction.progress_percentage}%"></div>
+                                </div>
+                                <p>Статус: <b>${auction.current_bidder_username ? 'Есть ставки' : 'Нет ставок'}</b></p>
+                            `;
+                            auctionsContainer.appendChild(auctionElement);
+                        });
+                    } else {
+                        auctionsContainer.innerHTML = `
+                            <div class="empty-message">
+                                <i class="fas fa-gavel"></i>
+                                <p>У вас нет активных аукционов</p>
+                            </div>
+                        `;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки аукционов:', error);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.body.style.opacity = 1;
+        });
+
+        document.addEventListener('touchstart', function(event) {
+            if (event.touches.length > 1) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function(event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+
+        document.addEventListener('gesturestart', function(event) {
+            event.preventDefault();
+        });
+    </script>
+</body>
+</html>
